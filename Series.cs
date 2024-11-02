@@ -85,18 +85,44 @@ namespace AniDownloaderTerminal
             return text.Replace('/', ' ').Replace('\\', ' ').Replace('?', ' ').Replace('%', ' ').Replace('*', ' ').Replace(':', ' ').Replace('|', ' ').Replace('\\', ' ').Replace('<', ' ').Replace('>', ' ').Replace("\"",string.Empty);
         }
 
+
+        public async Task<OnlineEpisodeElement[]> GetAvailableSeriesEpisodes()
+        {
+            List<OnlineEpisodeElement> episodes = new();
+            string seriesUrlEncoded = System.Web.HttpUtility.UrlEncode(Name);
+            string content = await Global.GetWebDataFromUrl("https://nyaa.si/?page=rss&q=" + seriesUrlEncoded + "&c=1_0&f=0");
+            string[] list = OnlineEpisodeElement.GetOnlineEpisodesListFromContent(content);
+
+            foreach (string item in list)
+            {
+                OnlineEpisodeElement element = new(item);
+                if (element == null) continue;
+                if (element.ProbableEpNumber == null) continue;
+                if (!element.IsAnime) continue;
+                if (element.IsTooOld) continue;
+                if (element.IsTooNew) continue;
+                if (!String.IsNullOrWhiteSpace(Filter))
+                {
+                    if (Regex.Match(element.Name, Filter).Success) continue;
+                }
+                if (Settings.ExcludeBatchReleases && element.Name.ToUpperInvariant().Contains("BATCH")) continue;
+                if (element.SizeMiB > Settings.MaxFileSizeMB)
+                {
+                    Global.TaskAdmin.Logger.Log(element.Name + " discarded due to big size (over " + Settings.MaxFileSizeMB.ToString() + "MB).", "GetAvailableSeriesEpisodes");
+                    continue;
+                }
+                element.AddEpisodeNumberOffset(Offset);
+                episodes.Add(element);
+            }
+            return episodes.ToArray();
+        }
+
+
     }
 
-    public enum Lang
-    {
-        Custom,
-        Eng,
-        CustomAndEng,
-        RAW,
-        Undefined
-    }
 
 
+    
 
 
 }

@@ -16,10 +16,7 @@ namespace AniDownloaderTerminal
         private readonly SeriesDownloader CurrentSeriesDownloader = new();
         private DataTable SeriesTable;
         private DataTable CurrentStatusTable = new("Torrent Status");
-        private readonly static string Exepath = AppDomain.CurrentDomain.BaseDirectory;
-        private readonly static string SeriesTableFilePath = Exepath + "/SeriesData.xml";
 
-        private DateTime LastNyaaRequest = DateTime.UtcNow;
         private int PreviousLineCount = 0;
         private int PreviousWindowHeight = 0;
         private int PreviousWindowWidth = 0;
@@ -112,7 +109,7 @@ namespace AniDownloaderTerminal
                     if (!Directory.Exists(sPath)) Directory.CreateDirectory(sPath);
                     Series series = new(sName, sPath, sOffset, sFilter);
                     CurrentlyScanningSeries = "Scanning : " + sName;
-                    OnlineEpisodeElement[] filteredEpisodes = FilterEpisodes(await GetAvailableSeriesEpisodes(series), series);
+                    OnlineEpisodeElement[] filteredEpisodes = FilterFoundEpisodes(await series.GetAvailableSeriesEpisodes(), series);
 
                     foreach (OnlineEpisodeElement episodeToDownload in filteredEpisodes)
                     {
@@ -175,112 +172,44 @@ namespace AniDownloaderTerminal
             Global.CurrentOpsQueue.Enqueue("Unconverted files search done.");
         }
 
-        private async Task<string> GetWebDataFromUrl(string url)
+        private static OnlineEpisodeElement[] FilterFoundEpisodes(OnlineEpisodeElement[] episodes, Series series)
         {
-            TimeSpan time = DateTime.UtcNow - LastNyaaRequest;
-            while (time.TotalSeconds < 2)
-            {
-                await Task.Run(() =>
-                {
-                    Thread.Sleep(100);
-                });
-                time = DateTime.UtcNow - LastNyaaRequest;
-            }
-
-            Global.CurrentOpsQueue.Enqueue("Loading web resource: " + url);
-            try
-            {
-                using HttpResponseMessage responseMessage = await Global.httpClient.GetAsync(url);
-                using HttpContent content = responseMessage.Content;
-                Thread.Sleep(1500); //Prevent server-side throttling
-                return await content.ReadAsStringAsync();
-
-            }
-            catch (Exception ex)
-            {
-                Global.TaskAdmin.Logger.EX_Log(ex.Message, "GetWebDataFromUrl");
-                return string.Empty;
-            }
-        }
-
-        private async Task<OnlineEpisodeElement[]> GetAvailableSeriesEpisodes(Series series)
-        {
-            List<OnlineEpisodeElement> episodes = new();
-            string seriesUrlEncoded = System.Web.HttpUtility.UrlEncode(series.Name);
-            string content = await GetWebDataFromUrl("https://nyaa.si/?page=rss&q=" + seriesUrlEncoded + "&c=1_0&f=0");
-            string[] list = OnlineEpisodeElement.GetOnlineEpisodesListFromContent(content);
-
-            foreach (string item in list)
-            {
-                OnlineEpisodeElement element = new(item);
-                if (element == null) continue;
-                if (element.ProbableEpNumber == null) continue;
-                if (!element.IsAnime) continue;
-                if (element.IsTooOld) continue;
-                if (element.IsTooNew) continue;
-                if (!String.IsNullOrWhiteSpace(series.Filter))
-                {
-                    if (Regex.Match(element.Name, series.Filter).Success) continue;
-                }
-                if (Settings.ExcludeBatchReleases && element.Name.ToUpperInvariant().Contains("BATCH")) continue; 
-                if (element.SizeMiB > Settings.MaxFileSizeMB) { 
-                    Global.TaskAdmin.Logger.Log(element.Name + " discarded due to big size (over " + Settings.MaxFileSizeMB.ToString() + "MB).", "GetAvailableSeriesEpisodes");
-                    continue;
-                }
-                element.AddEpisodeNumberOffset(series.Offset);
-                episodes.Add(element);
-            }
-            return episodes.ToArray();
-        }
-
-        private static OnlineEpisodeElement[] FilterEpisodes(OnlineEpisodeElement[] episodes, Series series)
-        {
-            Dictionary<int, OnlineEpisodeElement> epsQ = new();
-            List<OnlineEpisodeElement> filteredEpisodes_pre = new();
-            List<OnlineEpisodeElement> filteredEpisodes = new();
-
-
+            Dictionary<int, OnlineEpisodeElement> bestEpisodes = new Dictionary<int, OnlineEpisodeElement>();
+            List<OnlineEpisodeElement> preFilteredEpisodes = new List<OnlineEpisodeElement>();
 
             int[] downloadedEpisodes = series.GetEpisodesDownloaded();
 
             foreach (OnlineEpisodeElement episode in episodes)
             {
-                if (episode.ProbableEpNumber == null) continue;
-                if (!downloadedEpisodes.Contains((int)episode.ProbableEpNumber))
+                if (episode.ProbableEpNumber == null || downloadedEpisodes.Contains((int)episode.ProbableEpNumber))
                 {
-                    filteredEpisodes_pre.Add(episode);
+                    continue;
                 }
+                preFilteredEpisodes.Add(episode);
             }
 
-            foreach (OnlineEpisodeElement episode in filteredEpisodes_pre)
+            foreach (OnlineEpisodeElement episode in preFilteredEpisodes)
             {
-                if (episode.ProbableEpNumber == null || episode.ProbableLang == Lang.RAW) continue;
-
-                if (episode.ProbableLang == Lang.Undefined)
-                {
-                    Lang epLang = episode.GetProbableLanguage();
-                    episode.ProbableLang = epLang;
-                }
-
+                if (episode.ProbableEpNumber == null || episode.ProbableLang == Lang.RAW || episode.ProbableLang == Lang.Undefined) continue;
+                episode.ProbableLang = episode.ProbableLang == Lang.Undefined ? episode.GetProbableLanguage() : episode.ProbableLang;
                 if (episode.ProbableLang != Lang.Custom && episode.ProbableLang != Lang.CustomAndEng) continue;
 
-                int epnum = (int)episode.ProbableEpNumber;
-                if (!epsQ.ContainsKey(epnum))
+                int epNum = (int)episode.ProbableEpNumber;
+
+                if (!bestEpisodes.ContainsKey(epNum))
                 {
-                    epsQ.Add(epnum, episode);
+                    bestEpisodes.Add(epNum, episode);
                 }
-
-                if (epsQ[epnum].SizeMiB < episode.SizeMiB) epsQ[epnum] = episode;
-
-
-                bool isCurrentEpisodeUncensored = epsQ[epnum].Name.Contains("uncensored", StringComparison.OrdinalIgnoreCase)
-                                                || epsQ[epnum].Name.Contains("sin censura", StringComparison.OrdinalIgnoreCase);
-                bool isCandidateEpisodeUncensored = episode.Name.Contains("uncensored", StringComparison.OrdinalIgnoreCase)
-                                                || episode.Name.Contains("sin censura", StringComparison.OrdinalIgnoreCase);
-                if (isCandidateEpisodeUncensored && !isCurrentEpisodeUncensored) epsQ[epnum] = episode;
+                else
+                {
+                    if (episode.SizeMiB > bestEpisodes[epNum].SizeMiB || Global.TrySelectUncensoredEpisode(episode, bestEpisodes[epNum]) == episode)
+                    {
+                        bestEpisodes[epNum] = episode;
+                    }
+                }
             }
-            filteredEpisodes.AddRange(epsQ.Values);
-            return filteredEpisodes.ToArray();
+
+            return bestEpisodes.Values.ToArray();
         }
 
         public void SetUpdateEpisodesStatusTable(string torrentName, string episode, string torrentStatus, int torrentProgress)
@@ -429,11 +358,11 @@ namespace AniDownloaderTerminal
         {
             SeriesTable = new("Series");
 
-            if (File.Exists(SeriesTableFilePath))
+            if (File.Exists(Global.SeriesTableFilePath))
             {
                 try
                 {
-                    SeriesTable.ReadXml(SeriesTableFilePath);
+                    SeriesTable.ReadXml(Global.SeriesTableFilePath);
                 }
                 catch (Exception ex)
                 {

@@ -10,7 +10,25 @@ namespace AniDownloaderTerminal
     {
         public static ulong MaxFileSizeMB = 4000;
         public static bool ExcludeBatchReleases = true;
+        public static string DefaultPath = "";
+        public static string SettingsPath = Global.Exepath + "/AniDownloader.cfg";
+        public static string UncensoredEpisodeRegex = "[Uu]ncensored|[Ss]in *[Cc]ensura";
 
+
+        public void Init() {
+
+
+            Func<bool> SettingsWatcher = () =>
+            {
+               
+                return true;
+            };
+
+            Global.TaskAdmin.NewTask("StartDownloads", "Downloader", SettingsWatcher, 1000, true);
+
+
+
+        }
 
     }
 }
