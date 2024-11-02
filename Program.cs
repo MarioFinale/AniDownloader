@@ -13,11 +13,12 @@ namespace AniDownloaderTerminal
     public class Program
     {
         private string CurrentlyScanningSeries = string.Empty;
-        private readonly SeriesDownloader downloader = new();
+        private readonly SeriesDownloader CurrentSeriesDownloader = new();
         private DataTable SeriesTable;
         private DataTable CurrentStatusTable = new("Torrent Status");
         private readonly static string Exepath = AppDomain.CurrentDomain.BaseDirectory;
         private readonly static string SeriesTableFilePath = Exepath + "/SeriesData.xml";
+
         private DateTime LastNyaaRequest = DateTime.UtcNow;
         private int PreviousLineCount = 0;
         private int PreviousWindowHeight = 0;
@@ -43,7 +44,7 @@ namespace AniDownloaderTerminal
 
             Func<bool> StartDownloadsTask = () =>
             {
-                downloader.StartDownloads();
+                CurrentSeriesDownloader.StartDownloads();
                 return true;
             };
 
@@ -52,7 +53,7 @@ namespace AniDownloaderTerminal
 
             Func<bool> StartConvertionsTask = () =>
             {
-                downloader.StartConvertions();
+                CurrentSeriesDownloader.StartConvertions();
                 return true;
             };
 
@@ -61,7 +62,7 @@ namespace AniDownloaderTerminal
 
             Func<bool> CleanEncodedFilesTask = () =>
             {
-                downloader.CleanEncodedFiles();
+                CurrentSeriesDownloader.CleanEncodedFiles();
                 return true;
             };
 
@@ -107,7 +108,7 @@ namespace AniDownloaderTerminal
                     if (sPath == null) { continue; }
                     if (sPath == null) { continue; }
                     if (sFilter == null) { continue; }
-                    Global.currentOpsQueue.Enqueue("Checking " + sName);
+                    Global.CurrentOpsQueue.Enqueue("Checking " + sName);
                     if (!Directory.Exists(sPath)) Directory.CreateDirectory(sPath);
                     Series series = new(sName, sPath, sOffset, sFilter);
                     CurrentlyScanningSeries = "Scanning : " + sName;
@@ -118,8 +119,8 @@ namespace AniDownloaderTerminal
                         if (episodeToDownload.ProbableEpNumber == null) continue;
                         int episodeNumber = (int)episodeToDownload.ProbableEpNumber;
                         string episodeName = series.Name + " " + episodeNumber.ToString("00");
-                        if (downloader.Episodes.ContainsKey(episodeName)) continue;
-                        downloader.AddTorrentToDictionary(episodeToDownload.TorrentUrl, series.Path, episodeName, episodeNumber);
+                        if (CurrentSeriesDownloader.Episodes.ContainsKey(episodeName)) continue;
+                        CurrentSeriesDownloader.AddTorrentToDictionary(episodeToDownload.TorrentUrl, series.Path, episodeName, episodeNumber);
                     }
                 }
 
@@ -140,7 +141,7 @@ namespace AniDownloaderTerminal
                 string? sPath = row["Path"].ToString();
                 if (sName == null) { continue; }
                 if (sPath == null) { continue; }
-                Global.currentOpsQueue.Enqueue("Searching unconverted files for " + sName);
+                Global.CurrentOpsQueue.Enqueue("Searching unconverted files for " + sName);
                 if (!Directory.Exists(sPath)) continue;
                 foreach (string directoryPath in Directory.GetDirectories(sPath))
                 {
@@ -150,7 +151,7 @@ namespace AniDownloaderTerminal
                     Match episodeNumberMatch = Regex.Match(episodename, "\\d{1,3}$");
                     if (!episodeNumberMatch.Success) continue;
                     int episodeNumber = int.Parse(episodeNumberMatch.Value);
-                    if (downloader.Episodes.ContainsKey(episodename)) continue;
+                    if (CurrentSeriesDownloader.Episodes.ContainsKey(episodename)) continue;
                     if (File.Exists(directoryPath + "/" + "state.DownloadedSeeding") | File.Exists(directoryPath + "/" + "state.ReEncoding"))
                     {
                         SeriesDownloader.EpisodeToDownload episode = new("", episodename, sPath, episodeNumber);
@@ -160,18 +161,18 @@ namespace AniDownloaderTerminal
                         }
                         episode.SetState(SeriesDownloader.EpisodeToDownload.State.DownloadedSeeding);
                         episode.StatusDescription = "Downloaded-found";
-                        downloader.AddFoundEpisodeToDictionary(episode);
+                        CurrentSeriesDownloader.AddFoundEpisodeToDictionary(episode);
                     }
                     if (File.Exists(directoryPath + "/" + "state.EncodedSeeding") | File.Exists(directoryPath + "/" + "state.EncodedFound"))
                     {
                         SeriesDownloader.EpisodeToDownload episode = new("", episodename, sPath, episodeNumber);
                         episode.SetState(SeriesDownloader.EpisodeToDownload.State.EncodedFound);
                         episode.StatusDescription = "Encoded-found";
-                        downloader.AddFoundEpisodeToDictionary(episode);
+                        CurrentSeriesDownloader.AddFoundEpisodeToDictionary(episode);
                     }
                 }
             }
-            Global.currentOpsQueue.Enqueue("Unconverted files search done.");
+            Global.CurrentOpsQueue.Enqueue("Unconverted files search done.");
         }
 
         private async Task<string> GetWebDataFromUrl(string url)
@@ -186,7 +187,7 @@ namespace AniDownloaderTerminal
                 time = DateTime.UtcNow - LastNyaaRequest;
             }
 
-            Global.currentOpsQueue.Enqueue("Loading web resource: " + url);
+            Global.CurrentOpsQueue.Enqueue("Loading web resource: " + url);
             try
             {
                 using HttpResponseMessage responseMessage = await Global.httpClient.GetAsync(url);
@@ -316,7 +317,7 @@ namespace AniDownloaderTerminal
         {
             List<string> episodes = new();
 
-            foreach (KeyValuePair<string, SeriesDownloader.EpisodeToDownload> pair in downloader.Episodes)
+            foreach (KeyValuePair<string, SeriesDownloader.EpisodeToDownload> pair in CurrentSeriesDownloader.Episodes)
             {
                 SeriesDownloader.EpisodeToDownload episode = pair.Value;
                 SetUpdateEpisodesStatusTable(episode.TorrentName, episode.Name, episode.StatusDescription, episode.StatusPercentage);
@@ -354,13 +355,13 @@ namespace AniDownloaderTerminal
             currentSeries = MatchStringLenghtWithSpaces(currentSeries, consoleText.Split(Environment.NewLine)[0]);
             consoleText += currentSeries;
 
-            if (Global.currentOpsQueue.Count < 2)
+            if (Global.CurrentOpsQueue.Count < 2)
             {                
-                currentOpsString += Global.currentOpsQueue.Peek();
+                currentOpsString += Global.CurrentOpsQueue.Peek();
             }
             else
             {
-                currentOpsString += Global.currentOpsQueue.Dequeue();               
+                currentOpsString += Global.CurrentOpsQueue.Dequeue();               
             }
 
             currentOpsString = MatchStringLenghtWithSpaces(currentOpsString, consoleText.Split(Environment.NewLine)[0]);

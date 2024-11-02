@@ -9,7 +9,7 @@ namespace AniDownloaderTerminal
     public static class Global
     {
         public static TaskAdmin.Utility.TaskAdmin TaskAdmin = new();
-        public static readonly Queue<string> currentOpsQueue = new();
+        public static readonly Queue<string> CurrentOpsQueue = new();
         public static HttpClient httpClient = new();
     }
 }

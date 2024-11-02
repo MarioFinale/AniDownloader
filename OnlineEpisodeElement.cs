@@ -203,7 +203,7 @@ namespace AniDownloaderTerminal
         {
             try
             {
-                Global.currentOpsQueue.Enqueue("Loading web resource: " + url);
+                Global.CurrentOpsQueue.Enqueue("Loading web resource: " + url);
                 using HttpResponseMessage responseMessage = Task.Run(() => Global.httpClient.GetAsync(url)).Result;
                 using HttpContent content = responseMessage.Content;
                 Thread.Sleep(1500); //Prevent server-side throttling
