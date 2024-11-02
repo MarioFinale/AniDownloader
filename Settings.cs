@@ -6,7 +6,11 @@ using System.Threading.Tasks;
 
 namespace AniDownloaderTerminal
 {
-    internal class Settings
+    public class Settings
     {
+        public static ulong MaxFileSizeMB = 4000;
+        public static bool ExcludeBatchReleases = true;
+
+
     }
 }

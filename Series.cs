@@ -89,9 +89,9 @@ namespace AniDownloaderTerminal
 
     public enum Lang
     {
-        Spa,
+        Custom,
         Eng,
-        SpaEng,
+        CustomAndEng,
         RAW,
         Undefined
     }

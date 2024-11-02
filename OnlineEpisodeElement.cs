@@ -144,7 +144,7 @@ namespace AniDownloaderTerminal
 
                     if (isSpanish && isEnglish)
                     {
-                        ProbableLang = Lang.SpaEng;
+                        ProbableLang = Lang.CustomAndEng;
                     }
                     else if (isEnglish)
                     {
@@ -152,7 +152,7 @@ namespace AniDownloaderTerminal
                     }
                     else if (isSpanish)
                     {
-                        ProbableLang = Lang.Spa;
+                        ProbableLang = Lang.Custom;
                     }
                 }
             }
@@ -184,7 +184,7 @@ namespace AniDownloaderTerminal
 
                 if (isSpanish && isEnglish)
                 {
-                    resultLang = Lang.SpaEng;
+                    resultLang = Lang.CustomAndEng;
                 }
                 else if (isEnglish)
                 {
@@ -192,7 +192,7 @@ namespace AniDownloaderTerminal
                 }
                 else if (isSpanish)
                 {
-                    resultLang = Lang.Spa;
+                    resultLang = Lang.Custom;
                 }
             }
 

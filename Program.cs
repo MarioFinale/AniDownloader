@@ -221,9 +221,9 @@ namespace AniDownloaderTerminal
                 {
                     if (Regex.Match(element.Name, series.Filter).Success) continue;
                 }
-                if (element.Name.ToUpperInvariant().Contains("BATCH")) continue;
-                if (element.SizeMiB > 4000) { 
-                    Global.TaskAdmin.Logger.Log(element.Name + " discarded due to big size (over 4GiB).", "GetAvailableSeriesEpisodes");
+                if (Settings.ExcludeBatchReleases && element.Name.ToUpperInvariant().Contains("BATCH")) continue; 
+                if (element.SizeMiB > Settings.MaxFileSizeMB) { 
+                    Global.TaskAdmin.Logger.Log(element.Name + " discarded due to big size (over " + Settings.MaxFileSizeMB.ToString() + "MB).", "GetAvailableSeriesEpisodes");
                     continue;
                 }
                 element.AddEpisodeNumberOffset(series.Offset);
@@ -261,7 +261,7 @@ namespace AniDownloaderTerminal
                     episode.ProbableLang = epLang;
                 }
 
-                if (episode.ProbableLang != Lang.Spa && episode.ProbableLang != Lang.SpaEng) continue;
+                if (episode.ProbableLang != Lang.Custom && episode.ProbableLang != Lang.CustomAndEng) continue;
 
                 int epnum = (int)episode.ProbableEpNumber;
                 if (!epsQ.ContainsKey(epnum))
