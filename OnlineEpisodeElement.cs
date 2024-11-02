@@ -103,22 +103,19 @@ namespace AniDownloaderTerminal
                         break;
                 }
 
-                DateTime dateTime = new DateTime(yearInt, monthInt, dayInt);
+                DateTime dateTime = new(yearInt, monthInt, dayInt);
                 TimeSpan span = DateTime.Now.Subtract(dateTime);
-                if (span > TimeSpan.FromDays(60))
+                if (span > TimeSpan.FromDays(Settings.TooOldDays))
                 {
                     IsTooOld = true;
                 }
 
-                if (span < TimeSpan.FromMinutes(30)) //Let's wait at least 30min
+                if (span < TimeSpan.FromMinutes(Settings.TooNewMinutes))
                 {
                     IsTooNew = true;
                 }
 
             }
-
-
-
 
 
             Match epMatch = Regex.Match(Name, "(?:(?:s(?:eason)*\\d{1,2} *ep*| - )(\\d{1,2})|(\\d{1,2}) of \\d{1,2})", RegexOptions.IgnoreCase);
@@ -198,12 +195,6 @@ namespace AniDownloaderTerminal
 
             return resultLang;
         }
-
-        
-
-
-
-
 
 
     }

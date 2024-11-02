@@ -1,4 +1,5 @@
-﻿using System.Runtime.Serialization;
+﻿using System;
+using System.Runtime.Serialization;
 using System.Text.RegularExpressions;
 
 namespace AniDownloaderTerminal
@@ -92,7 +93,7 @@ namespace AniDownloaderTerminal
             string seriesUrlEncoded = System.Web.HttpUtility.UrlEncode(Name);
             string content = await Global.GetWebStringFromUrl("https://nyaa.si/?page=rss&q=" + seriesUrlEncoded + "&c=1_0&f=0");
             string[] list = OnlineEpisodeElement.GetOnlineEpisodesListFromContent(content);
-
+            int episodesFound = 0;
             foreach (string item in list)
             {
                 OnlineEpisodeElement element = new(item);
@@ -108,12 +109,14 @@ namespace AniDownloaderTerminal
                 if (Settings.ExcludeBatchReleases && element.Name.ToUpperInvariant().Contains("BATCH")) continue;
                 if (element.SizeMiB > Settings.MaxFileSizeMb)
                 {
-                    Global.TaskAdmin.Logger.Log(element.Name + " discarded due to big size (over " + Settings.MaxFileSizeMb.ToString() + "MB).", "GetAvailableSeriesEpisodes");
+                    Global.TaskAdmin.Logger.Log($"{element.Name} discarded due to big size (over { Settings.MaxFileSizeMb} MB).", "GetAvailableSeriesEpisodes");
                     continue;
                 }
                 element.AddEpisodeNumberOffset(Offset);
+                episodesFound += 1;
                 episodes.Add(element);
             }
+            Global.CurrentOpsQueue.Enqueue($"Found {episodesFound.ToString()} episode candidate{(episodesFound == 1 ? String.Empty : 's' )} online.");
             return episodes.ToArray();
         }
 

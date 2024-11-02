@@ -10,6 +10,8 @@ namespace AniDownloaderTerminal
     {
         public static ulong MaxFileSizeMb = 4000;
         public static ulong RPSDelayMs = 1500;
+        public static ulong TooOldDays = 60;
+        public static ulong TooNewMinutes = 120;
         public static bool ExcludeBatchReleases = true;
         public static string DefaultPath = "";
         public static string SettingsPath = Path.Combine(Global.Exepath, "AniDownloader.cfg");

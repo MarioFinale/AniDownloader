@@ -17,7 +17,7 @@ namespace AniDownloaderTerminal
         public readonly static string SeriesTableFilePath = Path.Combine(Exepath,"SeriesData.xml");
 
         private static DateTime LastRequestTime;
-        private static HttpClient httpClient = new();
+        private static readonly HttpClient httpClient = new();
 
 
         private static async Task DelayAsync()
@@ -33,19 +33,17 @@ namespace AniDownloaderTerminal
 
         private static async Task<T?> PerformHttpOperationAsync<T>(Func<HttpResponseMessage, Task<T>> operation, string url)
         {
-            Global.CurrentOpsQueue.Enqueue($"Performing HTTP operation on: {url}");
+            CurrentOpsQueue.Enqueue($"Loading: {url}");
             try
             {
                 await DelayAsync();
-                using (HttpResponseMessage response = await httpClient.GetAsync(url))
-                {
-                    response.EnsureSuccessStatusCode();
-                    return await operation(response);
-                }
+                using HttpResponseMessage response = await httpClient.GetAsync(url);
+                response.EnsureSuccessStatusCode();
+                return await operation(response);
             }
             catch (Exception ex)
             {
-                Global.TaskAdmin.Logger.EX_Log(ex.Message, "PerformHttpOperationAsync");
+                TaskAdmin.Logger.EX_Log(ex.Message, "PerformHttpOperationAsync");
                 return default;
             }
         }
@@ -71,18 +69,14 @@ namespace AniDownloaderTerminal
         {
             try
             {
-                using (FileStream fileStream = new FileStream(filePath, FileMode.CreateNew))
+                using FileStream fileStream = new(filePath, FileMode.CreateNew);
+                using Stream? stream = Task.Run(() => DownloadFileTask(url)).GetAwaiter().GetResult();
+                if (stream == null)
                 {
-                    using (Stream? stream = Task.Run(() => DownloadFileTask(url)).GetAwaiter().GetResult())
-                    {
-                        if (stream == null)
-                        {
-                            TaskAdmin.Logger.EX_Log("Failed to download file: Stream is null", "DownloadFileToPath");
-                            return false;
-                        }
-                        stream.CopyTo(fileStream);
-                    }
+                    TaskAdmin.Logger.EX_Log("Failed to download file: Stream is null", "DownloadFileToPath");
+                    return false;
                 }
+                stream.CopyTo(fileStream);
                 return true;
             }
             catch (Exception ex)
