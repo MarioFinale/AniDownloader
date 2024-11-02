@@ -13,7 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\TaskAdmin\Utility.vbproj" />
+    <ProjectReference Include=".\TaskAdmin\Utility.vbproj" />
   </ItemGroup>
 
 </Project>

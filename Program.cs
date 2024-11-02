@@ -344,47 +344,72 @@ namespace AniDownloaderTerminal
 
         private void PrintUpdateTable()
         {
-            string consoleText = string.Empty;
-            string currentSeries = CurrentlyScanningSeries;
-            string currentOpsString = string.Empty;
+            string consoleText = GetConsoleText();
+            string currentSeries = PrepareCurrentSeries(consoleText);
+            string currentOpsString = GetCurrentOpsString();
 
+            currentOpsString = MatchStringLenghtWithSpaces(currentOpsString, consoleText.Split('\n')[0]);
+            consoleText += '\n' + currentOpsString;
+
+            if (ShouldUpdateConsole(consoleText))
+            {
+                consoleText = UpdateConsole(consoleText);
+            }
+
+            consoleText += string.Join('\n', Enumerable.Repeat("", 2).Select(s => MatchStringLenghtWithSpaces(s, consoleText.Split('\n')[0])));
+
+            DisplayConsoleText(consoleText);
+        }
+
+        private string GetConsoleText()
+        {
+            string consoleText = string.Empty;
             lock (CurrentStatusTable)
             {
                 consoleText += CurrentStatusTable.ToPrettyPrintedString();
             }
-            currentSeries = MatchStringLenghtWithSpaces(currentSeries, consoleText.Split(Environment.NewLine)[0]);
-            consoleText += currentSeries;
+            return consoleText;
+        }
 
-            if (Global.CurrentOpsQueue.Count < 2)
-            {                
-                currentOpsString += Global.CurrentOpsQueue.Peek();
-            }
-            else
+        private string PrepareCurrentSeries(string consoleText)
+        {
+            return MatchStringLenghtWithSpaces(CurrentlyScanningSeries, consoleText.Split('\n')[0]);
+        }
+
+        private string GetCurrentOpsString()
+        {
+            return Global.CurrentOpsQueue.Count < 2
+                ? Global.CurrentOpsQueue.Peek()
+                : Global.CurrentOpsQueue.Dequeue();
+        }
+
+        private bool ShouldUpdateConsole(string consoleText)
+        {
+            int currentLineCount = consoleText.Split('\n').Length;
+            return currentLineCount != PreviousLineCount ||
+                   Console.BufferWidth != PreviousWindowWidth ||
+                   Console.BufferHeight != PreviousWindowHeight;
+        }
+
+        private string UpdateConsole(string consoleText)
+        {
+            PreviousLineCount = consoleText.Split('\n').Length;
+            PreviousWindowHeight = Console.BufferHeight;
+            PreviousWindowWidth = Console.BufferWidth;
+            try
             {
-                currentOpsString += Global.CurrentOpsQueue.Dequeue();               
+                Console.Clear();
             }
-
-            currentOpsString = MatchStringLenghtWithSpaces(currentOpsString, consoleText.Split(Environment.NewLine)[0]);
-            consoleText += Environment.NewLine + currentOpsString;
-
-            int currentLineCount = consoleText.Split(Environment.NewLine).Count();
-            if (currentLineCount != PreviousLineCount || Console.BufferWidth != PreviousWindowWidth || Console.BufferHeight != PreviousWindowHeight)
+            catch (IOException ex)
             {
-                PreviousLineCount = currentLineCount;
-                PreviousWindowHeight = Console.BufferHeight;
-                PreviousWindowWidth = Console.BufferWidth;
-                try
-                {
-                    Console.Clear();
-                }
-                catch (IOException ex)
-                {
-                    consoleText += Environment.NewLine + "[CLS EX:]" + ex.Message;
-                }
+                consoleText += "\n[CLS EX:]" + ex.Message;
+                Global.TaskAdmin.Logger.EX_Log(ex.Message, "UpdateConsole");
             }
-            consoleText += MatchStringLenghtWithSpaces(String.Empty, consoleText.Split(Environment.NewLine)[0]);
-            consoleText += MatchStringLenghtWithSpaces(String.Empty, consoleText.Split(Environment.NewLine)[0]);
+            return consoleText;
+        }
 
+        private void DisplayConsoleText(string consoleText)
+        {
             Console.SetCursorPosition(0, 0);
             Console.CursorVisible = false;
             Console.Write(consoleText);
