@@ -171,7 +171,7 @@ namespace AniDownloaderTerminal
 
         public Lang GetProbableLanguage()
         {
-            string pageText = GetWebDataFromUrl(ViewUrl);
+            string pageText = Global.GetWebStringFromUrlNonAsync(ViewUrl);
             Match descriptionMatch = Regex.Match(pageText, "id=\"torrent-description\">(.*?)<\\/div>", RegexOptions.Singleline);
             Lang resultLang = Lang.Undefined;
 
@@ -199,21 +199,7 @@ namespace AniDownloaderTerminal
             return resultLang;
         }
 
-        private string GetWebDataFromUrl(string url)
-        {
-            try
-            {
-                Global.CurrentOpsQueue.Enqueue("Loading web resource: " + url);
-                using HttpResponseMessage responseMessage = Task.Run(() => Global.httpClient.GetAsync(url)).Result;
-                using HttpContent content = responseMessage.Content;
-                Thread.Sleep(1500); //Prevent server-side throttling
-                return Task.Run(() => content.ReadAsStringAsync()).Result;
-            }
-            catch (Exception)
-            {
-                return string.Empty;
-            }
-        }
+        
 
 
 

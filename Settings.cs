@@ -8,10 +8,11 @@ namespace AniDownloaderTerminal
 {
     public class Settings
     {
-        public static ulong MaxFileSizeMB = 4000;
+        public static ulong MaxFileSizeMb = 4000;
+        public static ulong RPSDelayMs = 1500;
         public static bool ExcludeBatchReleases = true;
         public static string DefaultPath = "";
-        public static string SettingsPath = Global.Exepath + "/AniDownloader.cfg";
+        public static string SettingsPath = Path.Combine(Global.Exepath, "AniDownloader.cfg");
         public static string UncensoredEpisodeRegex = "[Uu]ncensored|[Ss]in *[Cc]ensura";
 
 

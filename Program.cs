@@ -134,42 +134,55 @@ namespace AniDownloaderTerminal
         {
             foreach (DataRow row in SeriesTable.Rows)
             {
-                string? sName = row["Name"].ToString();
-                string? sPath = row["Path"].ToString();
-                if (sName == null) { continue; }
-                if (sPath == null) { continue; }
-                Global.CurrentOpsQueue.Enqueue("Searching unconverted files for " + sName);
-                if (!Directory.Exists(sPath)) continue;
-                foreach (string directoryPath in Directory.GetDirectories(sPath))
+                // Extract and validate series name and path
+                string? seriesName = row["Name"]?.ToString();
+                string? seriesPath = row["Path"]?.ToString();
+
+                if (string.IsNullOrWhiteSpace(seriesName) || string.IsNullOrWhiteSpace(seriesPath))
                 {
-                    if (!directoryPath.ToLowerInvariant().EndsWith(".temp")) continue;
-                    string folderName = new DirectoryInfo(directoryPath).Name;
-                    string episodename = folderName.Replace(".temp", "").Trim();
-                    Match episodeNumberMatch = Regex.Match(episodename, "\\d{1,3}$");
-                    if (!episodeNumberMatch.Success) continue;
-                    int episodeNumber = int.Parse(episodeNumberMatch.Value);
-                    if (CurrentSeriesDownloader.Episodes.ContainsKey(episodename)) continue;
-                    if (File.Exists(directoryPath + "/" + "state.DownloadedSeeding") | File.Exists(directoryPath + "/" + "state.ReEncoding"))
+                    continue;
+                }
+
+                Global.CurrentOpsQueue.Enqueue($"Searching unconverted files for {seriesName}");
+
+                if (!Directory.Exists(seriesPath))
+                {
+                    continue;
+                }
+
+                foreach (string tempDirPath in Directory.GetDirectories(seriesPath, "*.temp"))
+                {
+                    string episodeName = Path.GetFileNameWithoutExtension(tempDirPath).Trim();
+
+                    if (!int.TryParse(Regex.Match(episodeName, @"\d{1,3}$").Value, out int episodeNumber)) continue;
+                    if (CurrentSeriesDownloader.Episodes.ContainsKey(episodeName)) continue;
+
+                    // Check for episode states
+                    if (File.Exists(Path.Combine(tempDirPath, "state.DownloadedSeeding")) ||
+                        File.Exists(Path.Combine(tempDirPath, "state.ReEncoding")))
                     {
-                        SeriesDownloader.EpisodeToDownload episode = new("", episodename, sPath, episodeNumber);
-                        if (File.Exists(sPath + "/" + episodename))
-                        {
-                            File.Delete(sPath + "/" + episodename);
-                        }
-                        episode.SetState(SeriesDownloader.EpisodeToDownload.State.DownloadedSeeding);
-                        episode.StatusDescription = "Downloaded-found";
-                        CurrentSeriesDownloader.AddFoundEpisodeToDictionary(episode);
+                        AddEpisode(episodeName, seriesPath, episodeNumber, State.DownloadedSeeding, "Downloaded-found");
                     }
-                    if (File.Exists(directoryPath + "/" + "state.EncodedSeeding") | File.Exists(directoryPath + "/" + "state.EncodedFound"))
+                    else if (File.Exists(Path.Combine(tempDirPath, "state.EncodedSeeding")) ||
+                             File.Exists(Path.Combine(tempDirPath, "state.EncodedFound")))
                     {
-                        SeriesDownloader.EpisodeToDownload episode = new("", episodename, sPath, episodeNumber);
-                        episode.SetState(SeriesDownloader.EpisodeToDownload.State.EncodedFound);
-                        episode.StatusDescription = "Encoded-found";
-                        CurrentSeriesDownloader.AddFoundEpisodeToDictionary(episode);
+                        AddEpisode(episodeName, seriesPath, episodeNumber, State.EncodedFound, "Encoded-found");
                     }
                 }
             }
+
             Global.CurrentOpsQueue.Enqueue("Unconverted files search done.");
+        }
+
+        private void AddEpisode(string episodeName, string seriesPath, int episodeNumber, State state, string status)
+        {
+            // Clean up existing file if necessary
+            string episodePath = Path.Combine(seriesPath, episodeName);
+            if (File.Exists(episodePath)) File.Delete(episodePath);
+            var episode = new SeriesDownloader.EpisodeToDownload("", episodeName, seriesPath, episodeNumber);
+            episode.SetState(state);
+            episode.StatusDescription = status;
+            CurrentSeriesDownloader.AddFoundEpisodeToDictionary(episode);
         }
 
         private static OnlineEpisodeElement[] FilterFoundEpisodes(OnlineEpisodeElement[] episodes, Series series)

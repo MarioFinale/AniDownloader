@@ -42,7 +42,7 @@ namespace AniDownloaderTerminal
         public int[] GetEpisodesDownloaded()
         {
            HashSet<int> episodes = new();
-           foreach (string fileName in System.IO.Directory.GetFiles(Path))
+           foreach (string fileName in Directory.GetFiles(Path))
             {
                 Match match = Regex.Match(fileName, @"(\d{2,3})\.(?:mp4|mkv)");
                 if (match.Success)
@@ -90,7 +90,7 @@ namespace AniDownloaderTerminal
         {
             List<OnlineEpisodeElement> episodes = new();
             string seriesUrlEncoded = System.Web.HttpUtility.UrlEncode(Name);
-            string content = await Global.GetWebDataFromUrl("https://nyaa.si/?page=rss&q=" + seriesUrlEncoded + "&c=1_0&f=0");
+            string content = await Global.GetWebStringFromUrl("https://nyaa.si/?page=rss&q=" + seriesUrlEncoded + "&c=1_0&f=0");
             string[] list = OnlineEpisodeElement.GetOnlineEpisodesListFromContent(content);
 
             foreach (string item in list)
@@ -106,9 +106,9 @@ namespace AniDownloaderTerminal
                     if (Regex.Match(element.Name, Filter).Success) continue;
                 }
                 if (Settings.ExcludeBatchReleases && element.Name.ToUpperInvariant().Contains("BATCH")) continue;
-                if (element.SizeMiB > Settings.MaxFileSizeMB)
+                if (element.SizeMiB > Settings.MaxFileSizeMb)
                 {
-                    Global.TaskAdmin.Logger.Log(element.Name + " discarded due to big size (over " + Settings.MaxFileSizeMB.ToString() + "MB).", "GetAvailableSeriesEpisodes");
+                    Global.TaskAdmin.Logger.Log(element.Name + " discarded due to big size (over " + Settings.MaxFileSizeMb.ToString() + "MB).", "GetAvailableSeriesEpisodes");
                     continue;
                 }
                 element.AddEpisodeNumberOffset(Offset);

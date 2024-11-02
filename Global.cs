@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Mono.Nat.Logging;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -11,39 +12,83 @@ namespace AniDownloaderTerminal
     {
         public static TaskAdmin.Utility.TaskAdmin TaskAdmin = new();
         public static readonly Queue<string> CurrentOpsQueue = new();
-        public static HttpClient httpClient = new();
 
         public readonly static string Exepath = AppDomain.CurrentDomain.BaseDirectory;
-        public readonly static string SeriesTableFilePath = Exepath + "/SeriesData.xml";
+        public readonly static string SeriesTableFilePath = Path.Combine(Exepath,"SeriesData.xml");
 
         private static DateTime LastRequestTime;
+        private static HttpClient httpClient = new();
 
-        public static async Task<string> GetWebDataFromUrl(string url)
+
+        private static async Task DelayAsync()
         {
-            TimeSpan time = DateTime.UtcNow - LastRequestTime;
-            while (time.TotalSeconds < 2)
+            TimeSpan timeElapsed = DateTime.UtcNow - LastRequestTime;
+            while (timeElapsed.TotalMilliseconds < Settings.RPSDelayMs)
             {
-                await Task.Run(() =>
-                {
-                    Thread.Sleep(100);
-                });
-                time = DateTime.UtcNow - LastRequestTime;
+                await Task.Delay(100);
+                timeElapsed = DateTime.UtcNow - LastRequestTime;
             }
+            LastRequestTime = DateTime.UtcNow;
+        }
 
-            Global.CurrentOpsQueue.Enqueue("Loading web resource: " + url);
+        private static async Task<T?> PerformHttpOperationAsync<T>(Func<HttpResponseMessage, Task<T>> operation, string url)
+        {
+            Global.CurrentOpsQueue.Enqueue($"Performing HTTP operation on: {url}");
             try
             {
-                using HttpResponseMessage responseMessage = await Global.httpClient.GetAsync(url);
-                using HttpContent content = responseMessage.Content;
-                Thread.Sleep(1500); //Prevent server-side throttling
-                LastRequestTime = DateTime.UtcNow;
-                return await content.ReadAsStringAsync();
-
+                await DelayAsync();
+                using (HttpResponseMessage response = await httpClient.GetAsync(url))
+                {
+                    response.EnsureSuccessStatusCode();
+                    return await operation(response);
+                }
             }
             catch (Exception ex)
             {
-                Global.TaskAdmin.Logger.EX_Log(ex.Message, "GetWebDataFromUrl");
-                return string.Empty;
+                Global.TaskAdmin.Logger.EX_Log(ex.Message, "PerformHttpOperationAsync");
+                return default;
+            }
+        }
+
+        public static async Task<string> GetWebStringFromUrl(string url)
+        {
+            string? result = await PerformHttpOperationAsync<string>(async response => await response.Content.ReadAsStringAsync(), url);
+            return result ?? string.Empty;
+        }
+
+        public static async Task<Stream?> DownloadFileTask(string url)
+        {
+            return await PerformHttpOperationAsync<Stream>(response => response.Content.ReadAsStreamAsync(), url);
+        }
+
+        public static string GetWebStringFromUrlNonAsync(string url)
+        {
+            string? result = Task.Run(() => GetWebStringFromUrl(url)).GetAwaiter().GetResult();
+            return result ?? string.Empty;
+        }
+
+        public static bool DownloadFileToPath(string url, string filePath)
+        {
+            try
+            {
+                using (FileStream fileStream = new FileStream(filePath, FileMode.CreateNew))
+                {
+                    using (Stream? stream = Task.Run(() => DownloadFileTask(url)).GetAwaiter().GetResult())
+                    {
+                        if (stream == null)
+                        {
+                            TaskAdmin.Logger.EX_Log("Failed to download file: Stream is null", "DownloadFileToPath");
+                            return false;
+                        }
+                        stream.CopyTo(fileStream);
+                    }
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                TaskAdmin.Logger.EX_Log(ex.Message, "DownloadFileToPath");
+                return false;
             }
         }
 

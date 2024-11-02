@@ -366,10 +366,7 @@ namespace AniDownloaderTerminal
                 {
                     File.Delete(filePath);
                 }
-
-                using var fs = new FileStream(filePath, FileMode.CreateNew);
-                Task.Run(async () => await Global.httpClient.GetStreamAsync(url).Result.CopyToAsync(fs)).Wait();
-                return true;
+                return Global.DownloadFileToPath(url, filePath);
             }
             catch (Exception ex)
             {
