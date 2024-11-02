@@ -16,6 +16,8 @@ namespace AniDownloaderTerminal
         public static string DefaultPath = "";
         public static string SettingsPath = Path.Combine(Global.Exepath, "AniDownloader.cfg");
         public static string UncensoredEpisodeRegex = "[Uu]ncensored|[Ss]in *[Cc]ensura";
+        public static string CustomLanguageNameRegex = @"[^\w]esp\w*|spanish|español";
+        public static string CustomLanguageDescriptionRegex = @"[^\\w]esp[^\\w]|spa[^\\w]| es[^\\w]|español|spanish";
 
 
         public void Init() {

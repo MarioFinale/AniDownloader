@@ -1,6 +1,7 @@
 ﻿using Mono.Nat.Logging;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -84,6 +85,14 @@ namespace AniDownloaderTerminal
                 TaskAdmin.Logger.EX_Log(ex.Message, "DownloadFileToPath");
                 return false;
             }
+        }
+
+        public static decimal ParseFileSize(string sizeStr)
+        {
+            var sizeMultiplier = new Dictionary<string, decimal> { { "KIB", 1m / 1000 }, { "MIB", 1m }, { "GIB", 1000m } };
+            var cleanedSize = sizeStr.ToUpper().Replace("KIB", "").Replace("MIB", "").Replace("GIB", "").Trim();
+            var multiplier = sizeMultiplier[sizeStr.ToUpper().Split(' ').FirstOrDefault(s => sizeMultiplier.ContainsKey(s)) ?? "MIB"];
+            return decimal.Parse(cleanedSize, CultureInfo.InvariantCulture) * multiplier;
         }
 
         public static OnlineEpisodeElement TrySelectUncensoredEpisode(OnlineEpisodeElement candidateEpisode, OnlineEpisodeElement currentEpisode)
