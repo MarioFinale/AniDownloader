@@ -1,4 +1,5 @@
 ﻿using System.Data;
+using System.Reflection.Emit;
 using System.Text.RegularExpressions;
 using DataTablePrettyPrinter;
 
@@ -379,7 +380,7 @@ namespace AniDownloaderTerminal
         }
 
         public static void LoadSeriesTable()
-        {
+        {            
             Global.SeriesTable.Clear();
 
             if (File.Exists(Global.SeriesTableFilePath))
@@ -394,30 +395,56 @@ namespace AniDownloaderTerminal
                 }
             }
             else
-            {
-                DataColumn[] keys = new DataColumn[1];
-                DataColumn SeriesColumn = new("Name", typeof(string));
-                Global.SeriesTable.Columns.Add(SeriesColumn);
-                keys[0] = SeriesColumn;
+            {               
+                
+                if (!Global.SeriesTable.Columns.Contains("Name"))
+                {
+                    DataColumn[] keys = new DataColumn[1];
+                    DataColumn SeriesColumn = new("Name", typeof(string));
+                    Global.SeriesTable.Columns.Add(SeriesColumn);
+                    keys[0] = SeriesColumn;
+                    Global.SeriesTable.PrimaryKey = keys;
+                }
 
-                DataColumn SeriesPath = new("Path", typeof(string));
-                Global.SeriesTable.Columns.Add(SeriesPath);
+                if (!Global.SeriesTable.Columns.Contains("Path"))
+                {
+                    DataColumn SeriesPath = new("Path", typeof(string));
+                    Global.SeriesTable.Columns.Add(SeriesPath);
+                }
 
-                DataColumn Offset = new("Offset", typeof(string));
-                Global.SeriesTable.Columns.Add(Offset);
+                if (!Global.SeriesTable.Columns.Contains("Offset"))
+                {
+                    DataColumn Offset = new("Offset", typeof(string));
+                    Global.SeriesTable.Columns.Add(Offset);
+                }
 
-                DataColumn Filter = new("Filter", typeof(string));
-                Global.SeriesTable.Columns.Add(Filter);
+                if (!Global.SeriesTable.Columns.Contains("Filter"))
+                {
+                    DataColumn Filter = new("Filter", typeof(string));
+                    Global.SeriesTable.Columns.Add(Filter);
+                }               
 
-                Global.SeriesTable.PrimaryKey = keys;
+                
             }
             lock (Global.CurrentStatusTable)
             {
                 Global.CurrentStatusTable.Clear();
-                Global.CurrentStatusTable.Columns.Add(new DataColumn("Torrent Name", typeof(string)));
-                Global.CurrentStatusTable.Columns.Add(new DataColumn("Episode", typeof(string)));
-                Global.CurrentStatusTable.Columns.Add(new DataColumn("Status", typeof(string)));
-                Global.CurrentStatusTable.Columns.Add(new DataColumn("Progress", typeof(int)));
+
+                if (!Global.CurrentStatusTable.Columns.Contains("Torrent ID")){
+                    Global.CurrentStatusTable.Columns.Add(new DataColumn("Torrent ID", typeof(string)));
+                }
+
+                if (!Global.CurrentStatusTable.Columns.Contains("Episode")){
+                    Global.CurrentStatusTable.Columns.Add(new DataColumn("Episode", typeof(string)));
+                }
+
+                if (!Global.CurrentStatusTable.Columns.Contains("Status")){
+                    Global.CurrentStatusTable.Columns.Add(new DataColumn("Status", typeof(string)));
+                }
+
+                if (!Global.CurrentStatusTable.Columns.Contains("Progress")){
+                    Global.CurrentStatusTable.Columns.Add(new DataColumn("Progress", typeof(int)));
+                }
 
                 Global.CurrentStatusTable.Columns[0].SetWidth(20);
                 Global.CurrentStatusTable.Columns[1].SetWidth(55);

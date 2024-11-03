@@ -213,7 +213,6 @@ namespace AniDownloaderTerminal
                 {
                     episode.SetState(State.EncodedFound);
                 }
-                if (episode.EpisodeState == State.EncodedFound) continue;
                 if (episode.TorrentManager != null)
                 {
                     double ratio = episode.TorrentManager.Monitor.DataBytesUploaded / episode.TorrentManager.Monitor.DataBytesDownloaded;
@@ -255,9 +254,9 @@ namespace AniDownloaderTerminal
                         torrentTempDir.Delete(true);
                         tries++;
                     }
-                    catch (Exception)
+                    catch (Exception ex)
                     {
-
+                        Global.TaskAdmin.Logger.EX_Log($"Failed to clean file: {ex.Message}", "CleanEncodedFiles");
                     }
                 }
                 Episodes.Remove(episode.Name);
