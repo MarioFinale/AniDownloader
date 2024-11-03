@@ -73,7 +73,7 @@ If you use `nohup` It's strongly recommended to redirect the output buffer to /d
 Configuration options can be set in AniDownloader.cfg and Series Data is stored in SeriesData.xml.
 
 # Web Interface
-Access the web server at 127.0.0.1:8080 to manage downloads and view stats. Changing the bind IP may require admin/root privileges.
+Access the web server at 127.0.0.1:8080 to manage downloads, view current list and change settings. Changing the default bind IP may require admin/root privileges.
 
 # Troubleshooting
 If the program crashes or becomes unresponsive, check logs in /var/log/AniDownloader.log.
