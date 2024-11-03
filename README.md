@@ -1,9 +1,10 @@
-﻿# AniDownloader
+﻿# AniDownloader  - Automated Anime Downloader, Transcoder and Manager
 
-**Disclaimer:** Before using AniDownloader, please ensure you comply with local laws and regulations regarding the downloading, copying, and distribution of copyrighted material. 
-This software is intended for use with content you have the rights to or that is legally available to download by your local laws. The creators of AniDownloader are not responsible for any legal issues arising from its misuse.
 
-AniDownloader is a terminal-based application for automatically managing anime series downloads, transcodes, and file organization. Designed to run on .NET 6, AniDownloader works on both Linux and Windows.
+**Disclaimer:** Before using AniDownloader, please ensure you comply with local laws and regulations regarding the downloading, copying, and distribution of copyrighted materials. This software should only be used with content that is legally available for download or where you have explicit rights.
+
+AniDownloader is a terminal-based application for automatically managing anime series downloads, transcoding, and file organization. Designed to run on .NET 6, AniDownloader works on both Linux and Windows. It uses nyaa.si as a source for files.
+
 
 ## Features
 
@@ -69,13 +70,23 @@ If you use `nohup` It's strongly recommended to redirect the output buffer to /d
 
 # Configuration
 
-Configuration options can be set in AniDownloader.cfg
-Series Data is stored in SeriesData.xml
+Configuration options can be set in AniDownloader.cfg and Series Data is stored in SeriesData.xml.
 
-A simple Web-Server is available and enabled by default. Can be accessed by the IP 127.0.0.1:8080. The bind ip can be changed.
+# Web Interface
+Access the web server at 127.0.0.1:8080 to manage downloads and view stats. Changing the bind IP may require admin/root privileges.
+
+# Troubleshooting
+If the program crashes or becomes unresponsive, check logs in /var/log/AniDownloader.log.
+Ensure ffmpeg is in your PATH for transcoding to work.
+
+# Support
+For issues or feature requests, open a ticket on GitHub.
 
 # Contributing
-
-Contributions are welcome! Please feel free to submit issues, feature requests, and pull requests. 
-
+Contributions are welcome! Please feel free to submit issues, feature requests, and pull requests.
 For pull request and code contributions, please follow the [style guide](./Style.md).
+
+# License
+AniDownloader is released under the GNU GENERAL PUBLIC LICENSE VERSION 2 (GPLv2). See the [LICENSE](./LICENSE) for details.
+
+View on [GitHub](github.com/MarioFinale/AniDownloader) | [Report a Bug or Issue](github.com/MarioFinale/AniDownloader/issues)
