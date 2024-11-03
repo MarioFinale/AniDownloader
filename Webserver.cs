@@ -104,9 +104,10 @@ namespace AniDownloaderTerminal
                     File.WriteAllLines(Global.SettingsPath, webParams);
                     Program.settings.LoadAndValidateSettingsFile();
                 }
+                               
 
 
-                pageData = File.ReadAllText(Path.Join(Global.Exepath, "SettingsPage.htm")).Replace("==========TABLE HERE===========", ConvertDataTableToHTML(Global.SeriesTable));
+                pageData = File.ReadAllText(Path.Join(Global.Exepath, "SettingsPage.htm")).Replace("==========TABLE HERE===========", ConvertSeriesDataTableToHTML(Global.SeriesTable));
                 pageData = pageData.Replace("MaxFileSizeMb-replace", Settings.MaxFileSizeMb.ToString());
                 pageData = pageData.Replace("RPSDelayMs-replace", Settings.RPSDelayMs.ToString());
                 pageData = pageData.Replace("TooOldDays-replace", Settings.TooOldDays.ToString());
@@ -162,6 +163,8 @@ namespace AniDownloaderTerminal
                 pageData = pageData.Replace("CustomLanguageDescriptionRegex-replace", Settings.CustomLanguageDescriptionRegex.ToString().Replace("\"", "&quot;"));
                 pageData = pageData.Replace("OutputTranscodeCommandLineArguments-replace", Settings.OutputTranscodeCommandLineArguments.ToString().Replace("\"", "&quot;"));
 
+                responseData = pageData;
+                resp.ContentType = "text/html";
 
                 if (!Settings.EnableWebServer)
                 {
@@ -181,11 +184,27 @@ namespace AniDownloaderTerminal
                     responseData = File.ReadAllText(Path.Join(Global.Exepath, "style.css"));
                     resp.ContentType = "text/css";
                 }
-                else
+
+                if (req.Url.AbsolutePath == "/status")
                 {
-                    responseData = pageData;
+                    responseData = ConvertStatusDataTableToHTML(Global.CurrentStatusTable);
                     resp.ContentType = "text/html";
                 }
+
+                if (req.Url.AbsolutePath == "/currentoperation")
+                {
+                    try
+                    {
+                        responseData = Global.CurrentOpsQueue.Peek();
+                    }
+                    catch (Exception ex)
+                    {
+                        Global.TaskAdmin.Logger.EX_Log($"currentoperation Error: {ex.Message}", "HandleIncomingConnections");
+                    }
+                    
+                    resp.ContentType = "text/html";
+                }
+
 
                 // Write the response info
                 byte[] data = Encoding.UTF8.GetBytes(responseData);
@@ -239,7 +258,7 @@ namespace AniDownloaderTerminal
             Global.TaskAdmin.NewTask("WebServer", "WebServer", WebServer, 1000, true, true);          
         }
 
-        private string ConvertDataTableToHTML(DataTable dt)
+        private string ConvertSeriesDataTableToHTML(DataTable dt)
         {
             string html = $"<table id=\"{dt.TableName}\" class=\"table\">";
             html += "<thead>";
@@ -268,7 +287,21 @@ namespace AniDownloaderTerminal
             return html;
         }
 
+        private string ConvertStatusDataTableToHTML(DataTable dt)
+        {
+            string html = "";
+            for (int i = 0; i < dt.Rows.Count; i++)
+            {
+                html += $"<tr id=\"sr_{i}\">";
+                for (int j = 0; j < dt.Columns.Count; j++)
+                {
+                    html += $"<td style=\"width:inherit; padding:inherit; box-sizing:border-box; align:center;\">{dt.Rows[i][j]}</td>";
+                }
 
+                html += "</tr>";
+            }
+            return html;
+        }
     }
 
 }

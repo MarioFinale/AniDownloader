@@ -39,6 +39,7 @@ namespace AniDownloaderTerminal
                 await DelayAsync();
                 using HttpResponseMessage response = await httpClient.GetAsync(url);
                 response.EnsureSuccessStatusCode();
+
                 return await operation(response);
             }
             catch (Exception ex)
@@ -56,7 +57,13 @@ namespace AniDownloaderTerminal
 
         public static async Task<Stream?> DownloadFileTask(string url)
         {
-            return await PerformHttpOperationAsync<Stream>(response => response.Content.ReadAsStreamAsync(), url);
+            return await PerformHttpOperationAsync(async response =>
+            {
+                var memoryStream = new MemoryStream();
+                await response.Content.CopyToAsync(memoryStream);
+                memoryStream.Position = 0;
+                return memoryStream;
+            }, url);
         }
 
         public static string GetWebStringFromUrlNonAsync(string url)
@@ -69,13 +76,15 @@ namespace AniDownloaderTerminal
         {
             try
             {
-                using FileStream fileStream = new(filePath, FileMode.CreateNew);
+                using FileStream fileStream = new FileStream(filePath, FileMode.CreateNew);
                 using Stream? stream = Task.Run(() => DownloadFileTask(url)).GetAwaiter().GetResult();
+
                 if (stream == null)
                 {
                     TaskAdmin.Logger.EX_Log("Failed to download file: Stream is null", "DownloadFileToPath");
                     return false;
                 }
+
                 stream.CopyTo(fileStream);
                 return true;
             }

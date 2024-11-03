@@ -202,7 +202,7 @@ namespace AniDownloaderTerminal
 
             foreach (OnlineEpisodeElement episode in preFilteredEpisodes)
             {
-                if (episode.ProbableEpNumber == null || episode.ProbableLang == Lang.RAW || episode.ProbableLang == Lang.Undefined) continue;
+                if (episode.ProbableEpNumber == null || episode.ProbableLang == Lang.RAW) continue;
                 episode.ProbableLang = episode.ProbableLang == Lang.Undefined ? episode.GetProbableLanguage() : episode.ProbableLang;
                 if (episode.ProbableLang != Lang.Custom && episode.ProbableLang != Lang.CustomAndEng) continue;
 

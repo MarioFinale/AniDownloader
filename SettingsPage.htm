@@ -10,7 +10,7 @@
     <body style="background-color: #f7f8fa;">
         <section class="ftco-section goto-here pb-0">
             <div class="container">
-                <h2 class="heading-section mb-3">AniDownloader web server</h2>
+                <h2 class="heading-section mb-2">AniDownloader web server</h2>
                 <div class="row">
                     <div class="col-lg-12 mb-5 mb-md-0">
                         <div class="tabulation">
@@ -18,7 +18,42 @@
                             </ul>
                             <div class="tab-content rounded mt-md-3">
                                 <div class="tab-pane container p-4 active">
-                                    <h2 class="heading-section mb-3">Current Series</h2>
+                                    <h3 class="heading-section mb-3">Download Status</h3>
+                                    <table class="table" id="currentDownloads">
+                                        <thead>
+                                            <tr>
+                                                <th scope="col">Torrent Name</th>
+                                                <th scope="col">Episode</th>
+                                                <th scope="col">Status</th>
+                                                <th scope="col">Progress</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="currentDownloads-body">
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="container">
+                <div class="col-lg-12 mb-5 mb-md-0 align-items-center">
+                    <h6>Current operation:</h6>
+                    <h6 id="current-operation">none</h6>
+                </div>
+            </div>
+        </section>
+        <section class="ftco-section goto-here pb-0">
+            <div class="container">
+                <div class="row">
+                    <div class="col-lg-12 mb-5 mb-md-0">
+                        <div class="tabulation">
+                            <ul class="nav nav-pills nav-fill d-md-flex d-block">
+                            </ul>
+                            <div class="tab-content rounded mt-md-3">
+                                <div class="tab-pane container p-4 active">
+                                    <h3 class="heading-section mb-3">Series to Download</h3>
                                     <form method="post" action="update">
                                         ==========TABLE HERE===========
                                         <br>
@@ -150,7 +185,7 @@
                                             </tbody>
                                         </table>
                                         <button id="update">Send settings to the server</button>
-                                    </form>                                    
+                                    </form>
                                 </div>
                             </div>
                         </div>
@@ -170,18 +205,40 @@
             function addRow() {
                 var rowNumber = document.getElementById("Series").rows.length - 1;
                 var element = '<tr id="sr_' + rowNumber + '">\
-                                                        <td><input style=\"width:105%; padding:inherit; box-sizing:border-box;\" type=\"text\" name=\"Name-'+ rowNumber + '\" value=\"\"/></td>\
-                                                        <td><input style=\"width:105%; padding:inherit; box-sizing:border-box;\" type=\"text\" name=\"Path-'+ rowNumber + '\" value=\"DefaultPath-replace\"/></td>\
-                                                        <td><input style=\"width:105%; padding:inherit; box-sizing:border-box;\" type=\"text\" name=\"Offset-'+ rowNumber + '\" value=\"0\"/></td>\
-                                                        <td><input style=\"width:105%; padding:inherit; box-sizing:border-box;\" type=\"text\" name=\"Filter-'+ rowNumber + '\" value=\"\"/></td>\
-                                                        <td><button id=\"del-' + rowNumber + '\" type=\"button\" onclick=\"deleteRow(' + rowNumber + ')\">x</button></td>\
-                                                        </tr>'
+                                                                <td><input style=\"width:105%; padding:inherit; box-sizing:border-box;\" type=\"text\" name=\"Name-'+ rowNumber + '\" value=\"\"/></td>\
+                                                                <td><input style=\"width:105%; padding:inherit; box-sizing:border-box;\" type=\"text\" name=\"Path-'+ rowNumber + '\" value=\"DefaultPath-replace\"/></td>\
+                                                                <td><input style=\"width:105%; padding:inherit; box-sizing:border-box;\" type=\"text\" name=\"Offset-'+ rowNumber + '\" value=\"0\"/></td>\
+                                                                <td><input style=\"width:105%; padding:inherit; box-sizing:border-box;\" type=\"text\" name=\"Filter-'+ rowNumber + '\" value=\"\"/></td>\
+                                                                <td><button id=\"del-' + rowNumber + '\" type=\"button\" onclick=\"deleteRow(' + rowNumber + ')\">x</button></td>\
+                                                                </tr>'
                 document.getElementById("Series_Body").innerHTML += element;
             }
 
             function deleteRow(index) {
                 document.getElementById("sr_" + index).remove();
             }
+
+            function updateTableContents(id) {
+                (async () => {
+                    let response = await fetch('./status');
+                    let termresult = await response.text();
+                    document.getElementById(id).innerHTML = termresult;
+                }) ();
+            }
+            function updateCurrentOperation(id) {
+                (async () => {
+                    let response = await fetch('./currentoperation');
+                    let termresult = await response.text();
+                    document.getElementById(id).innerHTML = termresult;
+                })();
+            }
+
+
+            (function () { //Auto-update the table every 300ms
+                updateTableContents("currentDownloads-body");
+                updateCurrentOperation("current-operation");
+                setTimeout(arguments.callee, 300);
+            })();
 
         </script>
 

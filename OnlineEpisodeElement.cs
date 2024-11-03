@@ -90,7 +90,7 @@ namespace AniDownloaderTerminal
 
         private void SetEpisodeNumber()
         {
-            var epMatch = Regex.Match(Name, @"(?:s\d{1,2}ep|ep| - )(\d{1,2})|(\d{1,2}) of \d{1,2}", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            var epMatch = Regex.Match(Name, @"(?:s\d{1,2} *ep|ep| - |s\d{1,2}e)(\d{1,2})|(\d{1,2}) of \d{1,2}", RegexOptions.IgnoreCase | RegexOptions.Singleline);
             if (epMatch.Success)
             {
                 _ProbableEpNumber = int.Parse(epMatch.Groups[1].Success ? epMatch.Groups[1].Value : epMatch.Groups[2].Value);
