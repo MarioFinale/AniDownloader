@@ -12,13 +12,9 @@ namespace AniDownloaderTerminal
 {
     public class Webserver
     {
-        public static HttpListener listener;
-        public static string url = $"http://{Settings.ListeningIP}:{Settings.WebserverPort}/";
-        public static int pageViews = 0;
-        public static int requestCount = 0;
-        public static string pageData = string.Empty;
-
-
+        private HttpListener? listener;
+        private string url = $"http://{Settings.ListeningIP}:{Settings.WebserverPort}/";
+        private string pageData = string.Empty;
 
         public async Task HandleIncomingConnections()
         {
@@ -27,18 +23,23 @@ namespace AniDownloaderTerminal
             Global.TaskAdmin.Logger.EX_Log($"Web server started.", "HandleIncomingConnections");
             while (runServer)
             {
+                if (listener is null)
+                {
+                    runServer = false;
+                    return;
+                }
                 string disableSubmit = !runServer ? "disabled" : "";
 
-                // Will wait here until we hear from a connection
                 HttpListenerContext ctx = await listener.GetContextAsync();
-                // Peel out the requests and response objects
                 HttpListenerRequest req = ctx.Request;
                 HttpListenerResponse resp = ctx.Response;
 
+                if (req is null) return;
+
+
                 string responseData = string.Empty;
 
-                // If `shutdown` url requested w/ POST, then shutdown the server after serving the page
-                if ((req.HttpMethod == "POST") && (req.Url.AbsolutePath == "/update"))
+                if ((req.HttpMethod == "POST") && (req.Url != null) && (req.Url.AbsolutePath == "/update"))
                 {
                     using var reader = new StreamReader(req.InputStream, req.ContentEncoding);
                     string text = reader.ReadToEnd();
@@ -56,7 +57,7 @@ namespace AniDownloaderTerminal
 
                             if (!paramsDic.ContainsKey(paramID))
                             {
-                                WebTable tab = new WebTable();
+                                WebTable tab = new();
                                 paramsDic.Add(paramID, tab);
                             }
 
@@ -96,7 +97,7 @@ namespace AniDownloaderTerminal
 
                 }
 
-                if ((req.HttpMethod == "POST") && (req.Url.AbsolutePath == "/settings"))
+                if ((req.HttpMethod == "POST") && (req.Url != null) && (req.Url.AbsolutePath == "/settings"))
                 {
                     using var reader = new StreamReader(req.InputStream, req.ContentEncoding);
                     string text = reader.ReadToEnd();
@@ -186,22 +187,20 @@ namespace AniDownloaderTerminal
                     runServer = false;
                 }
 
-                // Make sure we don't increment the page views counter if `favicon.ico` is requested
-                if (req.Url.AbsolutePath != "/favicon.ico") pageViews += 1;
 
-                if (req.Url.AbsolutePath == "/style.css")
+                if (req.Url != null && req.Url.AbsolutePath == "/style.css")
                 {
                     responseData = File.ReadAllText(Path.Join(Global.Exepath, "style.css"));
                     resp.ContentType = "text/css";
                 }
 
-                if (req.Url.AbsolutePath == "/status")
+                if (req.Url != null && req.Url.AbsolutePath == "/status")
                 {
                     responseData = ConvertStatusDataTableToHTML(Global.CurrentStatusTable);
                     resp.ContentType = "text/html";
                 }
 
-                if (req.Url.AbsolutePath == "/currentoperation")
+                if (req.Url != null && req.Url.AbsolutePath == "/currentoperation")
                 {
                     try
                     {
@@ -215,15 +214,10 @@ namespace AniDownloaderTerminal
                     resp.ContentType = "text/html";
                 }
 
-
-                // Write the response info
-                byte[] data = Encoding.UTF8.GetBytes(responseData);
-                
+                byte[] data = Encoding.UTF8.GetBytes(responseData);                
                 resp.ContentEncoding = Encoding.UTF8;
                 resp.ContentLength64 = data.LongLength;
-
-                // Write out to the response stream (asynchronously), then close it
-                await resp.OutputStream.WriteAsync(data, 0, data.Length);
+                await resp.OutputStream.WriteAsync(data);
                 resp.Close();
 
             }
@@ -232,15 +226,15 @@ namespace AniDownloaderTerminal
 
         private class WebTable
         {
-            public string Name;
-            public string Path;
-            public string Offset;
-            public string Filter;
+            public string Name = string.Empty;
+            public string Path = string.Empty;
+            public string Offset = string.Empty;
+            public string Filter = string.Empty;
         }
 
         public void Init()
         {
-            Func<bool> WebServer = () =>
+            bool WebServer()
             {
                 if (!Settings.EnableWebServer) return true;
                 // Create a Http server and start listening for incoming connections
@@ -255,7 +249,7 @@ namespace AniDownloaderTerminal
                 {
                     Global.TaskAdmin.Logger.EX_Log($"Web server cannot start: {ex.Message}", "GetAvailableSeriesEpisodes");
                     return false;
-                }              
+                }
 
                 // Handle requests
                 Task listenTask = HandleIncomingConnections();
@@ -264,11 +258,11 @@ namespace AniDownloaderTerminal
                 // Close the listener
                 listener.Close();
                 return true;
-            };
+            }
             Global.TaskAdmin.NewTask("WebServer", "WebServer", WebServer, 1000, true, true);          
         }
 
-        private string ConvertSeriesDataTableToHTML(DataTable dt)
+        private static string ConvertSeriesDataTableToHTML(DataTable dt)
         {
             string html = $"<table id=\"{dt.TableName}\" class=\"table\">";
             html += "<thead>";
@@ -286,7 +280,7 @@ namespace AniDownloaderTerminal
                 html += $"<tr id=\"sr_{i}\">";
                 for (int j = 0; j < dt.Columns.Count; j++)
                 {
-                    html += $"<td><input style=\"width:105%; padding:inherit; box-sizing:border-box;\" type=\"text\" name=\"{dt.Columns[j].ColumnName}-{i}\" value=\"{dt.Rows[i][j].ToString()}\"/></td>";                 
+                    html += $"<td><input style=\"width:105%; padding:inherit; box-sizing:border-box;\" type=\"text\" name=\"{dt.Columns[j].ColumnName}-{i}\" value=\"{dt.Rows[i][j]}\"/></td>";                 
                 }
 
                 html += $"<td><button id=\"del-{i}\" type=\"button\" onclick=\"deleteRow({i})\">x</button></td>";
@@ -297,7 +291,7 @@ namespace AniDownloaderTerminal
             return html;
         }
 
-        private string ConvertStatusDataTableToHTML(DataTable dt)
+        private static string ConvertStatusDataTableToHTML(DataTable dt)
         {
             string html = "";
             for (int i = 0; i < dt.Rows.Count; i++)

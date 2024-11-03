@@ -116,7 +116,7 @@ namespace AniDownloaderTerminal
                 episodesFound += 1;
                 episodes.Add(element);
             }
-            Global.CurrentOpsQueue.Enqueue($"Found {episodesFound.ToString()} episode candidate{(episodesFound == 1 ? String.Empty : 's' )} online.");
+            Global.CurrentOpsQueue.Enqueue($"Found {episodesFound} episode candidate{(episodesFound == 1 ? String.Empty : 's' )} online.");
             return episodes.ToArray();
         }
     }   

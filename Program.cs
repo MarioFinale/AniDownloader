@@ -16,8 +16,8 @@ namespace AniDownloaderTerminal
         private int PreviousWindowHeight = 0;
         private int PreviousWindowWidth = 0;
 
-        public static Settings settings = new();
-        public static Webserver webserver = new();
+        public static readonly Settings settings = new();
+        public static readonly Webserver webserver = new();
 
         public static void Main()
         {
@@ -38,25 +38,25 @@ namespace AniDownloaderTerminal
         {
             Console.Clear();
 
-            Func<bool> StartDownloadsTask = () =>
+            bool StartDownloadsTask()
             {
                 CurrentSeriesDownloader.StartDownloads();
                 return true;
-            };
+            }
 
             Global.TaskAdmin.NewTask("StartDownloads", "Downloader", StartDownloadsTask, 1000, true);
 
 
-            Func<bool> StartConvertionsTask = () =>
+            bool StartConvertionsTask()
             {
                 CurrentSeriesDownloader.StartConvertions();
                 return true;
-            };
+            }
 
             Global.TaskAdmin.NewTask("StartConvertions", "Downloader", StartConvertionsTask, 2000, true);
 
 
-            Func<bool> CleanEncodedFilesTask = () =>
+            bool CleanEncodedFilesTask()
             {
                 CurrentSeriesDownloader.CleanEncodedFiles();
                 return true;
@@ -64,7 +64,7 @@ namespace AniDownloaderTerminal
 
             Global.TaskAdmin.NewTask("CleanEncodedFiles", "Downloader", CleanEncodedFilesTask, 10000, true);
 
-            Func<bool> UpdateSeriesDataTableTask = () =>
+            bool UpdateSeriesDataTableTask()
             {
                 UpdateSeriesDataTable();
                 return true;
@@ -72,7 +72,7 @@ namespace AniDownloaderTerminal
 
             Global.TaskAdmin.NewTask("UpdateSeriesDataTable", "Downloader", UpdateSeriesDataTableTask, 200, true);
 
-            Func<bool> SearchForUncompletedEpisodesTask = () =>
+            bool SearchForUncompletedEpisodesTask()
             {
                 SearchForUncompletedEpisodes();
                 return true;
@@ -80,7 +80,7 @@ namespace AniDownloaderTerminal
 
             Global.TaskAdmin.NewTask("SearchForUncompletedEpisodes", "Downloader", SearchForUncompletedEpisodesTask, 60000, true);
 
-            Func<bool> PrintUpdateTableTask = () =>
+            bool PrintUpdateTableTask()
             {
                 PrintUpdateTable();
                 return true;
@@ -186,8 +186,8 @@ namespace AniDownloaderTerminal
 
         private static OnlineEpisodeElement[] FilterFoundEpisodes(OnlineEpisodeElement[] episodes, Series series)
         {
-            Dictionary<int, OnlineEpisodeElement> bestEpisodes = new Dictionary<int, OnlineEpisodeElement>();
-            List<OnlineEpisodeElement> preFilteredEpisodes = new List<OnlineEpisodeElement>();
+            Dictionary<int, OnlineEpisodeElement> bestEpisodes = new();
+            List<OnlineEpisodeElement> preFilteredEpisodes = new();
 
             int[] downloadedEpisodes = series.GetEpisodesDownloaded();
 
@@ -231,7 +231,7 @@ namespace AniDownloaderTerminal
             return bestEpisodes.Values.ToArray();
         }
 
-        public void SetUpdateEpisodesStatusTable(string torrentName, string episode, string torrentStatus, int torrentProgress)
+        public static void SetUpdateEpisodesStatusTable(string torrentName, string episode, string torrentStatus, int torrentProgress)
         {
             DataRow? row;
             lock (Global.CurrentStatusTable)
@@ -271,10 +271,10 @@ namespace AniDownloaderTerminal
                 SetUpdateEpisodesStatusTable(episode.TorrentName, episode.Name, episode.StatusDescription, episode.StatusPercentage);
                 episodes.Add(episode.Name);
             }
-            DataTable filteredDataTable;
+            
             lock (Global.CurrentStatusTable)
             {
-                filteredDataTable = Global.CurrentStatusTable.Clone();
+                using DataTable filteredDataTable = Global.CurrentStatusTable.Clone();
                 foreach (DataRow row in Global.CurrentStatusTable.AsEnumerable())
                 {
                     if (row == null) continue;
@@ -285,7 +285,12 @@ namespace AniDownloaderTerminal
                         filteredDataTable.ImportRow(row);
                     }
                 }
-                Global.CurrentStatusTable = filteredDataTable;
+                Global.CurrentStatusTable.Rows.Clear();
+                foreach (DataRow row in filteredDataTable.Rows)
+                {
+                    Global.CurrentStatusTable.Rows.Add(row.ItemArray);
+                }
+                
             }
 
         }
@@ -309,7 +314,7 @@ namespace AniDownloaderTerminal
             DisplayConsoleText(consoleText);
         }
 
-        private string GetConsoleText()
+        private static string GetConsoleText()
         {
             string consoleText = string.Empty;
             lock (Global.CurrentStatusTable)
@@ -324,7 +329,7 @@ namespace AniDownloaderTerminal
             return MatchStringLenghtWithSpaces(CurrentlyScanningSeries, consoleText.Split('\n')[0]);
         }
 
-        private string GetCurrentOpsString()
+        private static string GetCurrentOpsString()
         {
             return Global.CurrentOpsQueue.Count < 2
                 ? Global.CurrentOpsQueue.Peek()
@@ -356,7 +361,7 @@ namespace AniDownloaderTerminal
             return consoleText;
         }
 
-        private void DisplayConsoleText(string consoleText)
+        private static void DisplayConsoleText(string consoleText)
         {
             Console.SetCursorPosition(0, 0);
             Console.CursorVisible = false;
@@ -373,9 +378,9 @@ namespace AniDownloaderTerminal
             return stringToMatch;
         }
 
-        public void LoadSeriesTable()
+        public static void LoadSeriesTable()
         {
-            Global.SeriesTable = new("Series");
+            Global.SeriesTable.Clear();
 
             if (File.Exists(Global.SeriesTableFilePath))
             {
@@ -408,7 +413,7 @@ namespace AniDownloaderTerminal
             }
             lock (Global.CurrentStatusTable)
             {
-                Global.CurrentStatusTable = new("Torrent Status");
+                Global.CurrentStatusTable.Clear();
                 Global.CurrentStatusTable.Columns.Add(new DataColumn("Torrent Name", typeof(string)));
                 Global.CurrentStatusTable.Columns.Add(new DataColumn("Episode", typeof(string)));
                 Global.CurrentStatusTable.Columns.Add(new DataColumn("Status", typeof(string)));

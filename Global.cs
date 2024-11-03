@@ -6,15 +6,15 @@ namespace AniDownloaderTerminal
 {
     public static class Global
     {
-        public static TaskAdmin.Utility.TaskAdmin TaskAdmin = new();
+        public static readonly TaskAdmin.Utility.TaskAdmin TaskAdmin = new();
         public static readonly Queue<string> CurrentOpsQueue = new();
 
         public readonly static string Exepath = AppDomain.CurrentDomain.BaseDirectory;
         public readonly static string SeriesTableFilePath = Path.Combine(Exepath,"SeriesData.xml");
         public readonly static string SettingsPath = Path.Combine(Global.Exepath, "AniDownloader.cfg");
 
-        public static DataTable SeriesTable = new("Series");
-        public static DataTable CurrentStatusTable = new("Torrent Status");
+        public static readonly DataTable SeriesTable = new("Series");
+        public static readonly DataTable CurrentStatusTable = new("Torrent Status");
 
         private static DateTime LastRequestTime;
         private static readonly HttpClient httpClient = new();
@@ -76,7 +76,7 @@ namespace AniDownloaderTerminal
         {
             try
             {
-                using FileStream fileStream = new FileStream(filePath, FileMode.CreateNew);
+                using FileStream fileStream = new(filePath, FileMode.CreateNew);
                 using Stream? stream = Task.Run(() => DownloadFileTask(url)).GetAwaiter().GetResult();
 
                 if (stream == null)

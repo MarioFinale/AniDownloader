@@ -70,7 +70,7 @@ namespace AniDownloaderTerminal
             }
         }
 
-        private int MonthToNumber(string month)
+        private static int MonthToNumber(string month)
         => month switch
         {
             "jan" => 1,

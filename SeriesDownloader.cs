@@ -154,7 +154,7 @@ namespace AniDownloaderTerminal
                 if (!Directory.Exists(tempDownloadDirPath)) Directory.CreateDirectory(tempDownloadDirPath);
                 if (File.Exists(torrentFilePath)) File.Delete(torrentFilePath);
 
-                if (!DownloadDataToFile(episode.TorrentURL, torrentFilePath)) continue;
+                if (!Global.DownloadFileToPath(episode.TorrentURL, torrentFilePath)) continue;
                 Torrent torrent = Torrent.Load(torrentFilePath);
                 TorrentManager manager = Task.Run(() => engine.AddAsync(torrentFilePath, tempDownloadDirPath)).Result;
 
@@ -371,24 +371,6 @@ namespace AniDownloaderTerminal
             else
                 return new TimeSpan(0);
         }
-
-        private bool DownloadDataToFile(string url, string filePath)
-        {
-            try
-            {
-                if (File.Exists(filePath))
-                {
-                    File.Delete(filePath);
-                }
-                return Global.DownloadFileToPath(url, filePath);
-            }
-            catch (Exception ex)
-            {
-                Global.TaskAdmin.Logger.EX_Log("DownloadDataToFile", ex.Message);
-            }
-            return false;
-        }
-
 
         private static void TorrentStateChangedDelegate(TorrentStateChangedEventArgs e, EpisodeToDownload episode)
         {
