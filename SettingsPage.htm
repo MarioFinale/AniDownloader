@@ -87,12 +87,12 @@
                                                     <td>Use Seeding Ratio</td>
                                                     <td>
                                                         <select style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="UseRatio">
-                                                        <option value="True" <!--UseRatioTrueSelected-->>True</option>
-                                                        <option value="False" <!--UseRatioFalseSelected-->>False</option>
+                                                            <option value="True" <!--UseRatioTrueSelected-->>True</option>
+                                                            <option value="False" <!--UseRatioFalseSelected-->>False</option>
                                                         </select>
                                                     </td>
                                                 </tr>
-                                                <tr>                                                    
+                                                <tr>
                                                     <td>Exclude Batch Releases</td>
                                                     <td>
                                                         <select style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="ExcludeBatchReleases">
@@ -108,7 +108,7 @@
                                                             <option value="True" <!--EnableWebServerTrueSelected-->>True</option>
                                                             <option value="False" <!--EnableWebServerFalseSelected-->>False</option>
                                                         </select>
-                                                    </td>                                                   
+                                                    </td>
                                                 </tr>
                                                 <tr>
                                                     <td>Web server Port</td>
@@ -134,14 +134,34 @@
                                                     <td>Custom Language (Description) Regex</td>
                                                     <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="CustomLanguageDescriptionRegex" value="CustomLanguageDescriptionRegex-replace"></td>
                                                 </tr>
+                                                <tr>
+                                                    <td>Use HWAccel in FFMpeg</td>
+                                                    <td>
+                                                        <select style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="UseTranscodingHWAccel">
+                                                            <option value="True" <!--UseTranscodingHWAccelTrueSelected-->>True</option>
+                                                            <option value="False" <!--UseTranscodingHWAccelFalseSelected-->>False</option>
+                                                        </select>
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td>Output Transcoding FFMpeg Commandline Arguments</td>
+                                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="OutputTranscodeCommandLineArguments" value="OutputTranscodeCommandLineArguments-replace"></td>
+                                                </tr>
                                             </tbody>
                                         </table>
                                         <button id="update">Send settings to the server</button>
-                                    </form>
+                                    </form>                                    
                                 </div>
                             </div>
                         </div>
                     </div>
+                </div>
+            </div>
+            <div class="container">
+                <div class="col-lg-12 mb-5 mb-md-0 align-items-center">
+                    <h6>The "Output Transcoding FFMpeg Commandline Arguments" setting follows the following usage:</h6>
+                    <h6>FFMpeg -i "filetoConvert" -y OutputTranscodeCommandLineArguments "finalEpisodeName"</h6>
+                    <h6>Only modify this parameter if you know what are you doing.</h6>
                 </div>
             </div>
         </section>

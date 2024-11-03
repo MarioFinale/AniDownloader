@@ -49,7 +49,7 @@ namespace AniDownloaderTerminal
                     {
                         foreach (string postParam in webParams)
                         {
-                            string[] subparams = postParam.Split("=", 2);
+                            string[] subparams = postParam.Split("=", 2, StringSplitOptions.None);
                             string paramVal = subparams[1];
                             int paramID = int.Parse(subparams[0].Split("-")[1]);
                             string paramName = subparams[0].Split("-")[0].Trim();
@@ -112,8 +112,8 @@ namespace AniDownloaderTerminal
                 pageData = pageData.Replace("TooOldDays-replace", Settings.TooOldDays.ToString());
                 pageData = pageData.Replace("TooNewMinutes-replace", Settings.TooNewMinutes.ToString());
                 pageData = pageData.Replace("SeedingTimeHours-replace", Settings.SeedingTimeHours.ToString());
-                pageData = pageData.Replace("WebserverPort-replace", Settings.WebserverPort.ToString());
-                pageData = pageData.Replace("SeedingRatio-replace", Settings.SeedingRatio.ToString());
+                pageData = pageData.Replace("WebserverPort-replace", Settings.WebserverPort.ToString().Replace("\"", "\\\""));
+                pageData = pageData.Replace("SeedingRatio-replace", Settings.SeedingRatio.ToString().Replace("\"", "\\\""));
                 if (Settings.UseRatio)
                 {
                     pageData = pageData.Replace("<!--UseRatioTrueSelected-->", "selected");
@@ -144,12 +144,23 @@ namespace AniDownloaderTerminal
                     pageData = pageData.Replace("<!--EnableWebServerTrueSelected-->", "");
                     pageData = pageData.Replace("<!--EnableWebServerFalseSelected-->", "selected");
                 }
+                if (Settings.UseTranscodingHWAccel)
+                {
+                    pageData = pageData.Replace("<!--UseTranscodingHWAccelTrueSelected-->", "selected");
+                    pageData = pageData.Replace("<!--UseTranscodingHWAccelFalseSelected-->", "");
+                }
+                else
+                {
+                    pageData = pageData.Replace("<!--UseTranscodingHWAccelTrueSelected-->", "");
+                    pageData = pageData.Replace("<!--UseTranscodingHWAccelFalseSelected-->", "selected");
+                }
 
                 pageData = pageData.Replace("ListeningIP-replace", Settings.ListeningIP.ToString());
-                pageData = pageData.Replace("DefaultPath-replace", Settings.DefaultPath.ToString());
-                pageData = pageData.Replace("UncensoredEpisodeRegex-replace", Settings.UncensoredEpisodeRegex.ToString());
-                pageData = pageData.Replace("CustomLanguageNameRegex-replace", Settings.CustomLanguageNameRegex.ToString());
-                pageData = pageData.Replace("CustomLanguageDescriptionRegex-replace", Settings.CustomLanguageDescriptionRegex.ToString());
+                pageData = pageData.Replace("DefaultPath-replace", Settings.DefaultPath.ToString().Replace("\"", "&quot;"));
+                pageData = pageData.Replace("UncensoredEpisodeRegex-replace", Settings.UncensoredEpisodeRegex.ToString().Replace("\"", "&quot;"));
+                pageData = pageData.Replace("CustomLanguageNameRegex-replace", Settings.CustomLanguageNameRegex.ToString().Replace("\"", "&quot;"));
+                pageData = pageData.Replace("CustomLanguageDescriptionRegex-replace", Settings.CustomLanguageDescriptionRegex.ToString().Replace("\"", "&quot;"));
+                pageData = pageData.Replace("OutputTranscodeCommandLineArguments-replace", Settings.OutputTranscodeCommandLineArguments.ToString().Replace("\"", "&quot;"));
 
 
                 if (!Settings.EnableWebServer)

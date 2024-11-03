@@ -10,8 +10,7 @@ namespace AniDownloaderTerminal
     internal class SeriesDownloader
     {
         public Dictionary<string, EpisodeToDownload> Episodes = new();
-        private readonly ClientEngine engine;
-        private readonly string OutputCommandLine = "-map 0 -map -0:d -disposition:s:0 default -scodec copy -c:a aac -ac 2 -b:a 320k -vcodec libx264 -crf 25 -preset slow -movflags faststart -tune film -pix_fmt yuv420p -x264opts opencl -vf \"crop=trunc(iw/2)*2:trunc(ih/2)*2\"";
+        private readonly ClientEngine engine;    
         private bool CurrentlyEncodingVideoDurationFound = false;
         private TimeSpan CurrentlyEncodingVideoDuration = new();
         private TimeSpan CurrentlyEncodingVideoPosition = new();
@@ -275,8 +274,12 @@ namespace AniDownloaderTerminal
             {
                 File.Delete(finalEpisodeName);
             }
-
-            string args = "-hwaccel auto -i \"" + filetoConvert + "\" -y " + OutputCommandLine + " \"" + finalEpisodeName + "\"";
+            string args;
+            if (Settings.UseTranscodingHWAccel)
+            {
+                args = "-hwaccel auto ";
+            }
+             args = "-i \"" + filetoConvert + "\" -y " + Settings.OutputTranscodeCommandLineArguments + " \"" + finalEpisodeName + "\"";
 
             lock (episode)
             {

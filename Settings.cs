@@ -19,11 +19,13 @@ namespace AniDownloaderTerminal
         public static bool UseRatio = true;
         public static bool ExcludeBatchReleases = true;
         public static bool EnableWebServer = true;
+        public static bool UseTranscodingHWAccel = true;
         public static string ListeningIP = "127.0.0.1";
         public static string DefaultPath = "/";        
         public static string UncensoredEpisodeRegex = "[Uu]ncensored|[Ss]in *[Cc]ensura";
         public static string CustomLanguageNameRegex = @"[^\w]esp\w*|spanish|español";
         public static string CustomLanguageDescriptionRegex = @"[^\\w]esp[^\\w]|spa[^\\w]| es[^\\w]|español|spanish";
+        public static string OutputTranscodeCommandLineArguments = "-map 0 -map -0:d -disposition:s:0 default -scodec copy -c:a aac -ac 2 -b:a 320k -vcodec libx264 -crf 25 -preset slow -movflags faststart -tune film -pix_fmt yuv420p -x264opts opencl -vf \"crop=trunc(iw/2)*2:trunc(ih/2)*2\"";
         private bool InvalidSettings = false;
         private Dictionary<string, DateTime> _lastWriteTimes = new Dictionary<string, DateTime>();
 
@@ -53,7 +55,7 @@ namespace AniDownloaderTerminal
                 if (!File.Exists(Global.SettingsPath)) File.Create(Global.SettingsPath).Close();
                 Dictionary<string, string> settingValues = File.ReadLines(Global.SettingsPath)
                            .Where(x => !string.IsNullOrWhiteSpace(x))
-                           .Select(line => line.Split('=', 2).Select(part => part.Trim()).ToArray())
+                           .Select(line => line.Split('=', 2, StringSplitOptions.None).Select(part => part.Trim()).ToArray())
                            .Where(parts => parts.Length == 2)
                            .ToDictionary(parts => parts[0], parts => parts[1]);
 
@@ -72,6 +74,8 @@ namespace AniDownloaderTerminal
                 TryUpdateSetting(settingValues, "UncensoredEpisodeRegex", ref UncensoredEpisodeRegex);
                 TryUpdateSetting(settingValues, "CustomLanguageNameRegex", ref CustomLanguageNameRegex);
                 TryUpdateSetting(settingValues, "CustomLanguageDescriptionRegex", ref CustomLanguageDescriptionRegex);
+                TryUpdateSetting(settingValues, "OutputTranscodeCommandLineArguments", ref OutputTranscodeCommandLineArguments);
+                TryUpdateSetting(settingValues, "UseTranscodingHWAccel", ref UseTranscodingHWAccel);
 
                 if (InvalidSettings)
                 {
