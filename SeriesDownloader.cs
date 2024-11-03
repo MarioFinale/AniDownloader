@@ -220,7 +220,10 @@ namespace AniDownloaderTerminal
 
                     if (Settings.UseRatio)
                     {
-                        if (ratio < Settings.SeedingRatio) continue;
+                        if (ratio < Settings.SeedingRatio)
+                        {
+                            if (spannedTime.TotalHours < Settings.SeedingTimeHours) continue;
+                        }                       
                     }
                     else
                     {
