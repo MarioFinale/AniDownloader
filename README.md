@@ -1,5 +1,8 @@
 ﻿# AniDownloader
 
+**Disclaimer:** Before using AniDownloader, please ensure you comply with local laws and regulations regarding the downloading, copying, and distribution of copyrighted material. 
+This software is intended for use with content you have the rights to or that is legally available to download by your local laws. The creators of AniDownloader are not responsible for any legal issues arising from its misuse.
+
 AniDownloader is a terminal-based application for automatically managing anime series downloads, transcodes, and file organization. Designed to run on .NET 6, AniDownloader works on both Linux and Windows.
 
 ## Features
@@ -68,7 +71,7 @@ If you use `nohup` It's strongly recommended to redirect the output buffer to /d
 
 Configuration options can be set in SeriesData.xml. 
 
-A simple Web-Server is availiable and enabled by default. Can be accessed by the IP 127.0.0.1:8080. The bind ip can be changed.
+A simple Web-Server is available and enabled by default. Can be accessed by the IP 127.0.0.1:8080. The bind ip can be changed.
 
 # Contributing
 
