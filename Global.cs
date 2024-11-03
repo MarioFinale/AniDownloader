@@ -1,6 +1,7 @@
 ﻿using Mono.Nat.Logging;
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Globalization;
 using System.Linq;
 using System.Text;
@@ -16,6 +17,9 @@ namespace AniDownloaderTerminal
 
         public readonly static string Exepath = AppDomain.CurrentDomain.BaseDirectory;
         public readonly static string SeriesTableFilePath = Path.Combine(Exepath,"SeriesData.xml");
+
+        public static DataTable SeriesTable = new("Series");
+        public static DataTable CurrentStatusTable = new("Torrent Status");
 
         private static DateTime LastRequestTime;
         private static readonly HttpClient httpClient = new();
@@ -102,6 +106,26 @@ namespace AniDownloaderTerminal
             if (isCandidateEpisodeUncensored && !isCurrentEpisodeUncensored) currentEpisode = candidateEpisode;
             return currentEpisode;
         }
+        public static string ConvertDataTableToHTML(DataTable dt)
+        {
+            string html = "<table>";
+            //add header row
+            html += "<tr>";
+            for (int i = 0; i < dt.Columns.Count; i++)
+                html += "<td>" + dt.Columns[i].ColumnName + "</td>";
+            html += "</tr>";
+            //add rows
+            for (int i = 0; i < dt.Rows.Count; i++)
+            {
+                html += "<tr>";
+                for (int j = 0; j < dt.Columns.Count; j++)
+                    html += "<td>" + dt.Rows[i][j].ToString() + "</td>";
+                html += "</tr>";
+            }
+            html += "</table>";
+            return html;
+        }
+
 
 
     }

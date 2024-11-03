@@ -85,7 +85,7 @@ namespace AniDownloaderTerminal
             "oct" => 10,
             "nov" => 11,
             "dec" => 12,
-            _ => 1  // Default to January if not recognized
+            _ => 1 
         };
 
         private void SetEpisodeNumber()

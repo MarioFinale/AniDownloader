@@ -14,8 +14,6 @@ namespace AniDownloaderTerminal
     {
         private string CurrentlyScanningSeries = string.Empty;
         private readonly SeriesDownloader CurrentSeriesDownloader = new();
-        private DataTable SeriesTable;
-        private DataTable CurrentStatusTable = new("Torrent Status");
 
         private int PreviousLineCount = 0;
         private int PreviousWindowHeight = 0;
@@ -24,13 +22,16 @@ namespace AniDownloaderTerminal
         public static void Main()
         {
             Program program = new();
+            Settings settings = new();
+            Webserver webserver = new();
+            settings.Init();
+            webserver.Init();            
             var task = Task.Run(async () => { await program.Start(); });
             task.Wait();
         }
 
         public Program()
         {
-            SeriesTable = new("Series");
             LoadSeriesTable();
             Console.CursorVisible = false;
         }
@@ -95,7 +96,7 @@ namespace AniDownloaderTerminal
         {
             while (true)
             {
-                foreach (DataRow row in SeriesTable.Rows)
+                foreach (DataRow row in Global.SeriesTable.Rows)
                 {
                     string? sName = row["Name"].ToString();
                     string? sPath = row["Path"].ToString();
@@ -132,7 +133,7 @@ namespace AniDownloaderTerminal
 
         public void SearchForUncompletedEpisodes()
         {
-            foreach (DataRow row in SeriesTable.Rows)
+            foreach (DataRow row in Global.SeriesTable.Rows)
             {
                 // Extract and validate series name and path
                 string? seriesName = row["Name"]?.ToString();
@@ -228,14 +229,14 @@ namespace AniDownloaderTerminal
         public void SetUpdateEpisodesStatusTable(string torrentName, string episode, string torrentStatus, int torrentProgress)
         {
             DataRow? row;
-            lock (CurrentStatusTable)
+            lock (Global.CurrentStatusTable)
             {
-                row = CurrentStatusTable.AsEnumerable().Where(dr => dr.Field<string>("Episode") == episode).FirstOrDefault();
+                row = Global.CurrentStatusTable.AsEnumerable().Where(dr => dr.Field<string>("Episode") == episode).FirstOrDefault();
             }
 
             if (!(row == null))
             {
-                lock (CurrentStatusTable)
+                lock (Global.CurrentStatusTable)
                 {
                     lock (row)
                     {
@@ -248,9 +249,9 @@ namespace AniDownloaderTerminal
             }
             else
             {
-                lock (CurrentStatusTable)
+                lock (Global.CurrentStatusTable)
                 {
-                    CurrentStatusTable.Rows.Add(torrentName, episode, torrentStatus, torrentProgress);
+                    Global.CurrentStatusTable.Rows.Add(torrentName, episode, torrentStatus, torrentProgress);
                 }
             }
         }
@@ -266,10 +267,10 @@ namespace AniDownloaderTerminal
                 episodes.Add(episode.Name);
             }
             DataTable filteredDataTable;
-            lock (CurrentStatusTable)
+            lock (Global.CurrentStatusTable)
             {
-                filteredDataTable = CurrentStatusTable.Clone();
-                foreach (DataRow row in CurrentStatusTable.AsEnumerable())
+                filteredDataTable = Global.CurrentStatusTable.Clone();
+                foreach (DataRow row in Global.CurrentStatusTable.AsEnumerable())
                 {
                     if (row == null) continue;
                     string? value = row.Field<string>("Episode");
@@ -279,7 +280,7 @@ namespace AniDownloaderTerminal
                         filteredDataTable.ImportRow(row);
                     }
                 }
-                CurrentStatusTable = filteredDataTable;
+                Global.CurrentStatusTable = filteredDataTable;
             }
 
         }
@@ -306,9 +307,9 @@ namespace AniDownloaderTerminal
         private string GetConsoleText()
         {
             string consoleText = string.Empty;
-            lock (CurrentStatusTable)
+            lock (Global.CurrentStatusTable)
             {
-                consoleText += CurrentStatusTable.ToPrettyPrintedString();
+                consoleText += Global.CurrentStatusTable.ToPrettyPrintedString();
             }
             return consoleText;
         }
@@ -369,13 +370,13 @@ namespace AniDownloaderTerminal
 
         public void LoadSeriesTable()
         {
-            SeriesTable = new("Series");
+            Global.SeriesTable = new("Series");
 
             if (File.Exists(Global.SeriesTableFilePath))
             {
                 try
                 {
-                    SeriesTable.ReadXml(Global.SeriesTableFilePath);
+                    Global.SeriesTable.ReadXml(Global.SeriesTableFilePath);
                 }
                 catch (Exception ex)
                 {
@@ -386,32 +387,32 @@ namespace AniDownloaderTerminal
             {
                 DataColumn[] keys = new DataColumn[1];
                 DataColumn SeriesColumn = new("Name", typeof(string));
-                SeriesTable.Columns.Add(SeriesColumn);
+                Global.SeriesTable.Columns.Add(SeriesColumn);
                 keys[0] = SeriesColumn;
 
                 DataColumn SeriesPath = new("Path", typeof(string));
-                SeriesTable.Columns.Add(SeriesPath);
+                Global.SeriesTable.Columns.Add(SeriesPath);
 
                 DataColumn Offset = new("Offset", typeof(string));
-                SeriesTable.Columns.Add(Offset);
+                Global.SeriesTable.Columns.Add(Offset);
 
                 DataColumn Filter = new("Filter", typeof(string));
-                SeriesTable.Columns.Add(Filter);
+                Global.SeriesTable.Columns.Add(Filter);
 
-                SeriesTable.PrimaryKey = keys;
+                Global.SeriesTable.PrimaryKey = keys;
             }
-            lock (CurrentStatusTable)
+            lock (Global.CurrentStatusTable)
             {
-                CurrentStatusTable = new("Torrent Status");
-                CurrentStatusTable.Columns.Add(new DataColumn("Torrent Name", typeof(string)));
-                CurrentStatusTable.Columns.Add(new DataColumn("Episode", typeof(string)));
-                CurrentStatusTable.Columns.Add(new DataColumn("Status", typeof(string)));
-                CurrentStatusTable.Columns.Add(new DataColumn("Progress", typeof(int)));
+                Global.CurrentStatusTable = new("Torrent Status");
+                Global.CurrentStatusTable.Columns.Add(new DataColumn("Torrent Name", typeof(string)));
+                Global.CurrentStatusTable.Columns.Add(new DataColumn("Episode", typeof(string)));
+                Global.CurrentStatusTable.Columns.Add(new DataColumn("Status", typeof(string)));
+                Global.CurrentStatusTable.Columns.Add(new DataColumn("Progress", typeof(int)));
 
-                CurrentStatusTable.Columns[0].SetWidth(20);
-                CurrentStatusTable.Columns[1].SetWidth(55);
-                CurrentStatusTable.Columns[2].SetWidth(30);
-                CurrentStatusTable.Columns[3].SetWidth(10);
+                Global.CurrentStatusTable.Columns[0].SetWidth(20);
+                Global.CurrentStatusTable.Columns[1].SetWidth(55);
+                Global.CurrentStatusTable.Columns[2].SetWidth(30);
+                Global.CurrentStatusTable.Columns[3].SetWidth(10);
             }
         }
     }

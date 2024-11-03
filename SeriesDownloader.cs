@@ -214,9 +214,20 @@ namespace AniDownloaderTerminal
                 {
                     episode.SetState(State.EncodedFound);
                 }
-                if (!(spannedTime.TotalMinutes > 240) && (episode.EpisodeState != State.EncodedFound)) continue;
+                if (episode.EpisodeState == State.EncodedFound) continue;
                 if (episode.TorrentManager != null)
                 {
+                    double ratio = episode.TorrentManager.Monitor.DataBytesUploaded / episode.TorrentManager.Monitor.DataBytesDownloaded;
+
+                    if (Settings.UseRatio)
+                    {
+                        if (ratio < Settings.SeedingRatio) continue;
+                    }
+                    else
+                    {
+                        if (spannedTime.TotalHours < Settings.SeedingTimeHours) continue;
+                    }
+
                     try
                     {
                         _ = episode.TorrentManager.StopAsync();
