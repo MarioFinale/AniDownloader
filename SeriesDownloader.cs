@@ -7,7 +7,7 @@ using static AniDownloaderTerminal.SeriesDownloader.EpisodeToDownload;
 
 namespace AniDownloaderTerminal
 {
-    internal class SeriesDownloader
+    public class SeriesDownloader
     {
         public Dictionary<string, EpisodeToDownload> Episodes = new();
         private readonly ClientEngine engine;    
@@ -52,6 +52,7 @@ namespace AniDownloaderTerminal
             public string StatusDescription { get; set; }
 
             private DateTime _stateTime;
+            public State GetState { get => _episodeState; }
             private State _episodeState;
 
             public DateTime StateTime { get { return _stateTime; } }
@@ -111,6 +112,17 @@ namespace AniDownloaderTerminal
                 return DownloadPath + "/" + Name;
             }
 
+            public double GetTorrentRatio()
+            {
+                if (TorrentManager != null)
+                {
+                    double ratio = TorrentManager.Monitor.DataBytesUploaded / TorrentManager.Monitor.DataBytesDownloaded;
+                    return ratio;
+                }
+                return 0;
+            }
+
+
             public enum State
             {
                 NotStarted,
@@ -120,8 +132,9 @@ namespace AniDownloaderTerminal
                 EncodedSeeding,
                 EncodedFound
             }
-        }
 
+        }
+       
 
         public void AddTorrentToDictionary(string downloadurl, string downloadPath, string episodeName, int episodeNumber)
         {

@@ -232,12 +232,12 @@ namespace AniDownloaderTerminal
             return bestEpisodes.Values.ToArray();
         }
 
-        public static void SetUpdateEpisodesStatusTable(string torrentName, string episode, string torrentStatus, int torrentProgress)
+        public static void SetUpdateEpisodesStatusTable(SeriesDownloader.EpisodeToDownload episodeElement)
         {
             DataRow? row;
             lock (Global.CurrentStatusTable)
             {
-                row = Global.CurrentStatusTable.AsEnumerable().Where(dr => dr.Field<string>("Episode") == episode).FirstOrDefault();
+                row = Global.CurrentStatusTable.AsEnumerable().Where(dr => dr.Field<string>("Episode") == episodeElement.Name).FirstOrDefault();
             }
 
             if (!(row == null))
@@ -246,18 +246,24 @@ namespace AniDownloaderTerminal
                 {
                     lock (row)
                     {
-                        row[1] = episode;
-                        row[2] = torrentStatus;
-                        row[3] = torrentProgress;
+                        row[1] = episodeElement.Name;
+                        row[2] = episodeElement.StatusDescription;
+                        if (episodeElement.GetState == State.EncodedSeeding)
+                        {                          
+                            row[3] = "R:" + episodeElement.GetTorrentRatio();
+                        }
+                        else
+                        {
+                            row[3] = episodeElement.StatusPercentage;
+                        }                        
                     }
                 }
-
             }
             else
             {
                 lock (Global.CurrentStatusTable)
                 {
-                    Global.CurrentStatusTable.Rows.Add(torrentName, episode, torrentStatus, torrentProgress);
+                    Global.CurrentStatusTable.Rows.Add(episodeElement.TorrentName, episodeElement.Name, episodeElement.StatusDescription, episodeElement.StatusPercentage);
                 }
             }
         }
@@ -269,7 +275,7 @@ namespace AniDownloaderTerminal
             foreach (KeyValuePair<string, SeriesDownloader.EpisodeToDownload> pair in CurrentSeriesDownloader.Episodes)
             {
                 SeriesDownloader.EpisodeToDownload episode = pair.Value;
-                SetUpdateEpisodesStatusTable(episode.TorrentName, episode.Name, episode.StatusDescription, episode.StatusPercentage);
+                SetUpdateEpisodesStatusTable(episode);
                 episodes.Add(episode.Name);
             }
             
