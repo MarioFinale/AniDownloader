@@ -154,6 +154,16 @@ namespace AniDownloaderTerminal
                 {
                     pageData = pageData.Replace("<!--UseTranscodingHWAccelTrueSelected-->", "");
                     pageData = pageData.Replace("<!--UseTranscodingHWAccelFalseSelected-->", "selected");
+                }                
+                if (Settings.UseCustomLanguage)
+                {
+                    pageData = pageData.Replace("<!--UseCustomLanguageTrueSelected-->", "selected");
+                    pageData = pageData.Replace("<!--UseCustomLanguageFalseSelected-->", "");
+                }
+                else
+                {
+                    pageData = pageData.Replace("<!--UseUseCustomLanguageTrueSelected-->", "");
+                    pageData = pageData.Replace("<!--UseCustomLanguageFalseSelected-->", "selected");
                 }
 
                 pageData = pageData.Replace("ListeningIP-replace", Settings.ListeningIP.ToString());

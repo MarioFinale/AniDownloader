@@ -204,7 +204,14 @@ namespace AniDownloaderTerminal
             {
                 if (episode.ProbableEpNumber == null || episode.ProbableLang == Lang.RAW) continue;
                 episode.ProbableLang = episode.ProbableLang == Lang.Undefined ? episode.GetProbableLanguage() : episode.ProbableLang;
-                if (episode.ProbableLang != Lang.Custom && episode.ProbableLang != Lang.CustomAndEng) continue;
+                if (Settings.UseCustomLanguage)
+                {
+                    if (episode.ProbableLang != Lang.Custom && episode.ProbableLang != Lang.CustomAndEng) continue;
+                }
+                else
+                {
+                    if (episode.ProbableLang != Lang.Eng) continue;
+                }               
 
                 int epNum = (int)episode.ProbableEpNumber;
 

@@ -20,6 +20,7 @@ namespace AniDownloaderTerminal
         public static bool ExcludeBatchReleases = true;
         public static bool EnableWebServer = true;
         public static bool UseTranscodingHWAccel = true;
+        public static bool UseCustomLanguage = true;
         public static string ListeningIP = "127.0.0.1";
         public static string DefaultPath = "/";        
         public static string UncensoredEpisodeRegex = "[Uu]ncensored|[Ss]in *[Cc]ensura";
@@ -74,6 +75,7 @@ namespace AniDownloaderTerminal
                 TryUpdateSetting(settingValues, "UncensoredEpisodeRegex", ref UncensoredEpisodeRegex);
                 TryUpdateSetting(settingValues, "CustomLanguageNameRegex", ref CustomLanguageNameRegex);
                 TryUpdateSetting(settingValues, "CustomLanguageDescriptionRegex", ref CustomLanguageDescriptionRegex);
+                TryUpdateSetting(settingValues, "UseCustomLanguage", ref UseCustomLanguage);
                 TryUpdateSetting(settingValues, "OutputTranscodeCommandLineArguments", ref OutputTranscodeCommandLineArguments);
                 TryUpdateSetting(settingValues, "UseTranscodingHWAccel", ref UseTranscodingHWAccel);
 
