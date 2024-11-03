@@ -68,7 +68,7 @@ If you use `nohup` It's strongly recommended to redirect the output buffer to /d
 
 Configuration options can be set in SeriesData.xml. 
 
-A simple Web-Server is in the works.
+A simple Web-Server is availiable and enabled by default. Can be accessed by the IP 127.0.0.1:8080. The bind ip can be changed.
 
 # Contributing
 

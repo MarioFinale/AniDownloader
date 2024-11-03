@@ -16,4 +16,13 @@
     <ProjectReference Include=".\TaskAdmin\Utility.vbproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="SettingsPage.htm">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="style.css">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

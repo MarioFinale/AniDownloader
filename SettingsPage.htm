@@ -1,0 +1,170 @@
+﻿<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <title>Anidownloader Settings</title>
+        <link rel="icon" type="image/x-icon" href="/favicon.ico">
+        <link rel="stylesheet" href="style.css">
+    </head>
+
+    <body style="background-color: #f7f8fa;">
+        <section class="ftco-section goto-here pb-0">
+            <div class="container">
+                <h2 class="heading-section mb-3">AniDownloader web server</h2>
+                <div class="row">
+                    <div class="col-lg-12 mb-5 mb-md-0">
+                        <div class="tabulation">
+                            <ul class="nav nav-pills nav-fill d-md-flex d-block">
+                            </ul>
+                            <div class="tab-content rounded mt-md-3">
+                                <div class="tab-pane container p-4 active">
+                                    <h2 class="heading-section mb-3">Current Series</h2>
+                                    <form method="post" action="update">
+                                        ==========TABLE HERE===========
+                                        <br>
+                                        <button id="update">Send series table to the server</button>
+                                    </form>
+                                    <br>
+                                    <button id="addRow" onclick="addRow()">Add Row</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="container">
+                <div class="col-lg-12 mb-5 mb-md-0 align-items-center">
+                    <h6>Offset adds an offset value to the episode numbers.</h6>
+                    <h6>"Filter" is a Regular Expression that excludes matches.</h6>
+                </div>
+            </div>
+        </section>
+
+        <section class="ftco-section goto-here pb-0">
+            <div class="container">
+                <div class="row">
+                    <div class="col-lg-12 mb-5 mb-md-0">
+                        <div class="tabulation">
+                            <ul class="nav nav-pills nav-fill d-md-flex d-block">
+                            </ul>
+                            <div class="tab-content rounded mt-md-3">
+                                <div class="tab-pane container p-4 active">
+                                    <h2 class="heading-section mb-3">Program settings</h2>
+                                    <form method="post" action="settings">
+                                        <table id="Settings">
+                                            <thead>
+                                                <tr>
+                                                    <th scope="col">Setting</th>
+                                                    <th scope="col">Value</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="Settings">
+                                                <tr>
+                                                    <td>Max File Size (MB)</td>
+                                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="MaxFileSizeMb" value="MaxFileSizeMb-replace"></td>
+                                                </tr>
+                                                <tr>
+                                                    <td>Delay for web requests</td>
+                                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="RPSDelayMs" value="RPSDelayMs-replace"></td>
+                                                </tr>
+                                                <tr>
+                                                    <td>Episode too old (days)</td>
+                                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="TooOldDays" value="TooOldDays-replace"></td>
+                                                </tr>
+                                                <tr>
+                                                    <td>Episode too new (minutes)</td>
+                                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="TooNewMinutes" value="TooNewMinutes-replace"></td>
+                                                </tr>
+                                                <tr>
+                                                    <td>Seeding time (hours)</td>
+                                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="SeedingTimeHours" value="SeedingTimeHours-replace"></td>
+                                                </tr>
+                                                <tr>
+                                                    <td>Seeding Ratio</td>
+                                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="SeedingRatio" value="SeedingRatio-replace"></td>
+                                                </tr>
+                                                <tr>
+                                                    <td>Use Seeding Ratio</td>
+                                                    <td>
+                                                        <select style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="UseRatio">
+                                                        <option value="True" <!--UseRatioTrueSelected-->>True</option>
+                                                        <option value="False" <!--UseRatioFalseSelected-->>False</option>
+                                                        </select>
+                                                    </td>
+                                                </tr>
+                                                <tr>                                                    
+                                                    <td>Exclude Batch Releases</td>
+                                                    <td>
+                                                        <select style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="ExcludeBatchReleases">
+                                                            <option value="True" <!--ExcludeBatchReleasesTrueSelected-->>True</option>
+                                                            <option value="False" <!--ExcludeBatchReleasesFalseSelected-->>False</option>
+                                                        </select>
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td>Enable Web Server</td>
+                                                    <td>
+                                                        <select style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="EnableWebServer">
+                                                            <option value="True" <!--EnableWebServerTrueSelected-->>True</option>
+                                                            <option value="False" <!--EnableWebServerFalseSelected-->>False</option>
+                                                        </select>
+                                                    </td>                                                   
+                                                </tr>
+                                                <tr>
+                                                    <td>Web server Port</td>
+                                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="WebserverPort" value="WebserverPort-replace"></td>
+                                                </tr>
+                                                <tr>
+                                                    <td>Listening IP</td>
+                                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="ListeningIP" value="ListeningIP-replace"></td>
+                                                </tr>
+                                                <tr>
+                                                    <td>Default Series Path</td>
+                                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="DefaultPath" value="DefaultPath-replace"></td>
+                                                </tr>
+                                                <tr>
+                                                    <td>Uncensored Episodes Regex</td>
+                                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="UncensoredEpisodeRegex" value="UncensoredEpisodeRegex-replace"></td>
+                                                </tr>
+                                                <tr>
+                                                    <td>Custom Language (Name) Regex</td>
+                                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="CustomLanguageNameRegex" value="CustomLanguageNameRegex-replace"></td>
+                                                </tr>
+                                                <tr>
+                                                    <td>Custom Language (Description) Regex</td>
+                                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="CustomLanguageDescriptionRegex" value="CustomLanguageDescriptionRegex-replace"></td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                        <button id="update">Send settings to the server</button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <script type="text/javascript">
+            function addRow() {
+                var rowNumber = document.getElementById("Series").rows.length - 1;
+                var element = '<tr id="sr_' + rowNumber + '">\
+                                                        <td><input style=\"width:105%; padding:inherit; box-sizing:border-box;\" type=\"text\" name=\"Name-'+ rowNumber + '\" value=\"\"/></td>\
+                                                        <td><input style=\"width:105%; padding:inherit; box-sizing:border-box;\" type=\"text\" name=\"Path-'+ rowNumber + '\" value=\"DefaultPath-replace\"/></td>\
+                                                        <td><input style=\"width:105%; padding:inherit; box-sizing:border-box;\" type=\"text\" name=\"Offset-'+ rowNumber + '\" value=\"0\"/></td>\
+                                                        <td><input style=\"width:105%; padding:inherit; box-sizing:border-box;\" type=\"text\" name=\"Filter-'+ rowNumber + '\" value=\"\"/></td>\
+                                                        <td><button id=\"del-' + rowNumber + '\" type=\"button\" onclick=\"deleteRow(' + rowNumber + ')\">x</button></td>\
+                                                        </tr>'
+                document.getElementById("Series_Body").innerHTML += element;
+            }
+
+            function deleteRow(index) {
+                document.getElementById("sr_" + index).remove();
+            }
+
+        </script>
+
+
+    </body>
+</html>

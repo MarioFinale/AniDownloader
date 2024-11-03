@@ -20,8 +20,7 @@ namespace AniDownloaderTerminal
         public static bool ExcludeBatchReleases = true;
         public static bool EnableWebServer = true;
         public static string ListeningIP = "127.0.0.1";
-        public static string DefaultPath = "/";
-        public static string SettingsPath = Path.Combine(Global.Exepath, "AniDownloader.cfg");
+        public static string DefaultPath = "/";        
         public static string UncensoredEpisodeRegex = "[Uu]ncensored|[Ss]in *[Cc]ensura";
         public static string CustomLanguageNameRegex = @"[^\w]esp\w*|spanish|español";
         public static string CustomLanguageDescriptionRegex = @"[^\\w]esp[^\\w]|spa[^\\w]| es[^\\w]|español|spanish";
@@ -35,7 +34,7 @@ namespace AniDownloaderTerminal
 
             Func<bool> SettingsWatcher = () =>
             {
-                if (HasFileBeenModified(SettingsPath))
+                if (HasFileBeenModified(Global.SettingsPath))
                 {
                     LoadAndValidateSettingsFile();
                     Global.CurrentOpsQueue.Enqueue("Loaded new settings.");
@@ -47,12 +46,12 @@ namespace AniDownloaderTerminal
 
         }
 
-        private void LoadAndValidateSettingsFile()
+        public void LoadAndValidateSettingsFile()
         {
             try
             {
-                if (!File.Exists(SettingsPath)) File.Create(SettingsPath).Close();
-                Dictionary<string, string> settingValues = File.ReadLines(SettingsPath)
+                if (!File.Exists(Global.SettingsPath)) File.Create(Global.SettingsPath).Close();
+                Dictionary<string, string> settingValues = File.ReadLines(Global.SettingsPath)
                            .Where(x => !string.IsNullOrWhiteSpace(x))
                            .Select(line => line.Split('=', 2).Select(part => part.Trim()).ToArray())
                            .Where(parts => parts.Length == 2)
@@ -70,7 +69,6 @@ namespace AniDownloaderTerminal
                 TryUpdateSetting(settingValues, "EnableWebServer", ref EnableWebServer);
                 TryUpdateSetting(settingValues, "ListeningIP", ref ListeningIP);
                 TryUpdateSetting(settingValues, "DefaultPath", ref DefaultPath);
-                TryUpdateSetting(settingValues, "SettingsPath", ref SettingsPath);
                 TryUpdateSetting(settingValues, "UncensoredEpisodeRegex", ref UncensoredEpisodeRegex);
                 TryUpdateSetting(settingValues, "CustomLanguageNameRegex", ref CustomLanguageNameRegex);
                 TryUpdateSetting(settingValues, "CustomLanguageDescriptionRegex", ref CustomLanguageDescriptionRegex);
@@ -83,7 +81,7 @@ namespace AniDownloaderTerminal
                     {
                         newSettings.Add($"{setting.Key} = {setting.Value}");
                     }
-                    File.WriteAllLines(SettingsPath, newSettings);
+                    File.WriteAllLines(Global.SettingsPath, newSettings);
                 }
 
             }

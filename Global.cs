@@ -1,12 +1,6 @@
-﻿using Mono.Nat.Logging;
-using System;
-using System.Collections.Generic;
-using System.Data;
+﻿using System.Data;
 using System.Globalization;
-using System.Linq;
-using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 
 namespace AniDownloaderTerminal
 {
@@ -17,6 +11,7 @@ namespace AniDownloaderTerminal
 
         public readonly static string Exepath = AppDomain.CurrentDomain.BaseDirectory;
         public readonly static string SeriesTableFilePath = Path.Combine(Exepath,"SeriesData.xml");
+        public readonly static string SettingsPath = Path.Combine(Global.Exepath, "AniDownloader.cfg");
 
         public static DataTable SeriesTable = new("Series");
         public static DataTable CurrentStatusTable = new("Torrent Status");
@@ -106,27 +101,6 @@ namespace AniDownloaderTerminal
             if (isCandidateEpisodeUncensored && !isCurrentEpisodeUncensored) currentEpisode = candidateEpisode;
             return currentEpisode;
         }
-        public static string ConvertDataTableToHTML(DataTable dt)
-        {
-            string html = "<table>";
-            //add header row
-            html += "<tr>";
-            for (int i = 0; i < dt.Columns.Count; i++)
-                html += "<td>" + dt.Columns[i].ColumnName + "</td>";
-            html += "</tr>";
-            //add rows
-            for (int i = 0; i < dt.Rows.Count; i++)
-            {
-                html += "<tr>";
-                for (int j = 0; j < dt.Columns.Count; j++)
-                    html += "<td>" + dt.Rows[i][j].ToString() + "</td>";
-                html += "</tr>";
-            }
-            html += "</table>";
-            return html;
-        }
-
-
 
     }
 }

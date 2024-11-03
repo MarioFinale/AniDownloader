@@ -1,10 +1,7 @@
 ﻿using System.Data;
-using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
-using System.Xml.Linq;
 using DataTablePrettyPrinter;
-using Mono.Nat.Logging;
-using TaskAdmin.Utility;
+
 using static AniDownloaderTerminal.SeriesDownloader.EpisodeToDownload;
 
 
@@ -19,11 +16,12 @@ namespace AniDownloaderTerminal
         private int PreviousWindowHeight = 0;
         private int PreviousWindowWidth = 0;
 
+        public static Settings settings = new();
+        public static Webserver webserver = new();
+
         public static void Main()
         {
             Program program = new();
-            Settings settings = new();
-            Webserver webserver = new();
             settings.Init();
             webserver.Init();            
             var task = Task.Run(async () => { await program.Start(); });
