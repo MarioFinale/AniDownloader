@@ -84,7 +84,7 @@ For issues or feature requests, open a ticket on GitHub.
 
 # Contributing
 Contributions are welcome! Please feel free to submit issues, feature requests, and pull requests.
-For pull request and code contributions, please follow the [style guide](./Style.md).
+For pull request and code contributions, please follow the [style guide](./STYLE.md).
 
 # License
 AniDownloader is released under the GNU GENERAL PUBLIC LICENSE VERSION 2 (GPLv2). See the [LICENSE](./LICENSE) for details.
