@@ -70,8 +70,6 @@ namespace AniDownloaderTerminal
         private readonly Dictionary<string, DateTime> LastWriteTimes = new();
 
         public void Init() {
-
-
             LoadAndValidateSettingsFile();
 
             bool SettingsWatcher()
@@ -83,9 +81,7 @@ namespace AniDownloaderTerminal
                 }
                 return true;
             };
-
             Global.TaskAdmin.NewTask("SettingsWatcher", "Settings", SettingsWatcher, 5000, true);
-
         }
 
         public void LoadAndValidateSettingsFile()

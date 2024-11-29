@@ -12,11 +12,10 @@ namespace AniDownloaderTerminal
 {
     public class Webserver
     {
-        private HttpListener? listener;
         private string url = $"http://{Settings.ListeningIP}:{Settings.WebserverPort}/";
         private string pageData = string.Empty;
 
-        public async Task HandleIncomingConnections()
+        public async Task HandleIncomingConnections(HttpListener listener)
         {
             bool runServer = true;
 
@@ -239,23 +238,21 @@ namespace AniDownloaderTerminal
                 if (!Settings.EnableWebServer) return true;
                 // Create a Http server and start listening for incoming connections
                 url = $"http://{Settings.ListeningIP}:{Settings.WebserverPort}/";
-                listener = new HttpListener();
+                using HttpListener listener = new HttpListener();
                 try
                 {
                     listener.Prefixes.Add(url);
                     listener.Start();
+                    // Handle requests
+                    Task listenTask = HandleIncomingConnections(listener);
+                    listenTask.GetAwaiter().GetResult();
                 }
                 catch (Exception ex)
                 {
                     Global.TaskAdmin.Logger.EX_Log($"Web server cannot start: {ex.Message}", "GetAvailableSeriesEpisodes");
+                    listener.Close();
                     return false;
                 }
-
-                // Handle requests
-                Task listenTask = HandleIncomingConnections();
-                listenTask.GetAwaiter().GetResult();
-
-                // Close the listener
                 listener.Close();
                 return true;
             }
