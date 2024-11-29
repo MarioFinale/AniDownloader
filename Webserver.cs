@@ -238,7 +238,7 @@ namespace AniDownloaderTerminal
                 if (!Settings.EnableWebServer) return true;
                 // Create a Http server and start listening for incoming connections
                 url = $"http://{Settings.ListeningIP}:{Settings.WebserverPort}/";
-                using HttpListener listener = new HttpListener();
+                using HttpListener listener = new();
                 try
                 {
                     listener.Prefixes.Add(url);
