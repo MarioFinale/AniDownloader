@@ -155,126 +155,147 @@ namespace AniDownloaderTerminal
 
         public void StartDownloads()
         {
-
-            foreach (KeyValuePair<string, EpisodeToDownload> pair in Episodes)
+            try
             {
-                if (!pair.Value.EpisodeState.Equals(EpisodeToDownload.State.NotStarted)) continue;
-                EpisodeToDownload episode = pair.Value;
-
-                string tempDownloadDirPath = episode.GetTempDownloadPath();
-                string torrentFilePath = episode.GetTorrentFilePath();
-
-                if (!Directory.Exists(tempDownloadDirPath)) Directory.CreateDirectory(tempDownloadDirPath);
-                if (File.Exists(torrentFilePath)) File.Delete(torrentFilePath);
-
-                if (!Global.DownloadFileToPath(episode.TorrentURL, torrentFilePath)) continue;
-                Torrent torrent = Torrent.Load(torrentFilePath);
-                TorrentManager manager = Task.Run(() => engine.AddAsync(torrentFilePath, tempDownloadDirPath)).Result;
-
-                lock (episode)
+                foreach (KeyValuePair<string, EpisodeToDownload> pair in Episodes)
                 {
-                    episode.TorrentManager = manager;
-                    episode.TorrentManager.TorrentStateChanged += (o, e) => TorrentStateChangedDelegate(e, episode);
-                    episode.TorrentManager.PeerConnected += (o, e) => TorrentConnectionSuccessfulDelegate(e, episode);
-                    episode.TorrentManager.ConnectionAttemptFailed += (o, e) => TorrentConnectionAttemptFailedDelegate(e, episode);
-                    episode.TorrentManager.PieceHashed += (o, e) => TorrentPieceHashedDelegate(e, episode);
-                    episode.TorrentManager.TrackerManager.AnnounceComplete += (o, e) => TorrentTrackerManagerAnnounceCompleteDelegate(e, episode);
-                    _ = Task.Run(() =>
+                    if (!pair.Value.EpisodeState.Equals(EpisodeToDownload.State.NotStarted)) continue;
+                    EpisodeToDownload episode = pair.Value;
+
+                    string tempDownloadDirPath = episode.GetTempDownloadPath();
+                    string torrentFilePath = episode.GetTorrentFilePath();
+
+                    if (!Directory.Exists(tempDownloadDirPath)) Directory.CreateDirectory(tempDownloadDirPath);
+                    if (File.Exists(torrentFilePath)) File.Delete(torrentFilePath);
+
+                    if (!Global.DownloadFileToPath(episode.TorrentURL, torrentFilePath)) continue;
+                    Torrent torrent = Torrent.Load(torrentFilePath);
+                    TorrentManager manager = Task.Run(() => engine.AddAsync(torrentFilePath, tempDownloadDirPath)).Result;
+
+                    lock (episode)
                     {
-                        episode.TorrentManager.StartAsync();
-                    });
-                    episode.SetState(EpisodeToDownload.State.Downloading);
-                    episode.StatusDescription = "Downloading";
+                        episode.TorrentManager = manager;
+                        episode.TorrentManager.TorrentStateChanged += (o, e) => TorrentStateChangedDelegate(e, episode);
+                        episode.TorrentManager.PeerConnected += (o, e) => TorrentConnectionSuccessfulDelegate(e, episode);
+                        episode.TorrentManager.ConnectionAttemptFailed += (o, e) => TorrentConnectionAttemptFailedDelegate(e, episode);
+                        episode.TorrentManager.PieceHashed += (o, e) => TorrentPieceHashedDelegate(e, episode);
+                        episode.TorrentManager.TrackerManager.AnnounceComplete += (o, e) => TorrentTrackerManagerAnnounceCompleteDelegate(e, episode);
+                        _ = Task.Run(() =>
+                        {
+                            episode.TorrentManager.StartAsync();
+                        });
+                        episode.SetState(EpisodeToDownload.State.Downloading);
+                        episode.StatusDescription = "Downloading";
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                Global.TaskAdmin.Logger.EX_Log(ex.Message, "StartDownloads");
             }
         }
 
         public void StartConvertions()
         {
-            foreach (KeyValuePair<string, EpisodeToDownload> pair in Episodes)
+            try
             {
-                if (!pair.Value.EpisodeState.Equals(EpisodeToDownload.State.DownloadedSeeding)) continue;
-                EpisodeToDownload episode = pair.Value;
-                string fileToConvertPath = string.Empty;
-
-                foreach (string file in Directory.EnumerateFiles(episode.GetTempDownloadPath()))
+                foreach (KeyValuePair<string, EpisodeToDownload> pair in Episodes)
                 {
-                    if (Path.GetExtension(file).ToLowerInvariant().Equals(".mp4") | Path.GetExtension(file).ToLowerInvariant().Equals(".mkv"))
+                    if (!pair.Value.EpisodeState.Equals(EpisodeToDownload.State.DownloadedSeeding)) continue;
+                    EpisodeToDownload episode = pair.Value;
+                    string fileToConvertPath = string.Empty;
+
+                    foreach (string file in Directory.EnumerateFiles(episode.GetTempDownloadPath()))
                     {
-                        fileToConvertPath = file;
+                        if (Path.GetExtension(file).ToLowerInvariant().Equals(".mp4") | Path.GetExtension(file).ToLowerInvariant().Equals(".mkv"))
+                        {
+                            fileToConvertPath = file;
+                        }
+                    }
+                    if (string.IsNullOrWhiteSpace(fileToConvertPath)) continue;
+                    ConvertFile(episode, fileToConvertPath);
+                    lock (episode)
+                    {
+                        episode.SetState(EpisodeToDownload.State.EncodedSeeding);
+                        episode.StatusPercentage = 100;
+                        episode.StatusDescription = "Encoded-Seeding";
                     }
                 }
-                if (string.IsNullOrWhiteSpace(fileToConvertPath)) continue;
-                ConvertFile(episode, fileToConvertPath);
-                lock (episode)
-                {
-                    episode.SetState(EpisodeToDownload.State.EncodedSeeding);
-                    episode.StatusPercentage = 100;
-                    episode.StatusDescription = "Encoded-Seeding";
-                }
             }
+            catch (Exception ex)
+            {
+                Global.TaskAdmin.Logger.EX_Log(ex.Message, "StartConvertions");
+            }
+            
         }
 
         public void CleanEncodedFiles()
         {
-            foreach (KeyValuePair<string, EpisodeToDownload> pair in Episodes)
+            try
             {
-                if (!pair.Value.EpisodeState.Equals(EpisodeToDownload.State.EncodedSeeding) && !pair.Value.EpisodeState.Equals(EpisodeToDownload.State.EncodedFound)) continue;
-                EpisodeToDownload episode = pair.Value;
-                TimeSpan spannedTime = DateTime.Now - episode.StateTime;
-                if (string.IsNullOrWhiteSpace(episode.TorrentName))
+                foreach (KeyValuePair<string, EpisodeToDownload> pair in Episodes)
                 {
-                    episode.SetState(State.EncodedFound);
-                }
-                if (episode.TorrentManager != null)
-                {
-                    double ratio = episode.TorrentManager.Monitor.DataBytesUploaded / episode.TorrentManager.Monitor.DataBytesDownloaded;
-
-                    if (Settings.UseRatio)
+                    if (!pair.Value.EpisodeState.Equals(EpisodeToDownload.State.EncodedSeeding) && !pair.Value.EpisodeState.Equals(EpisodeToDownload.State.EncodedFound)) continue;
+                    EpisodeToDownload episode = pair.Value;
+                    TimeSpan spannedTime = DateTime.Now - episode.StateTime;
+                    if (string.IsNullOrWhiteSpace(episode.TorrentName))
                     {
-                        if (ratio < Settings.SeedingRatio)
+                        episode.SetState(State.EncodedFound);
+                    }
+                    if (episode.TorrentManager != null)
+                    {
+                        double ratio = episode.TorrentManager.Monitor.DataBytesUploaded / episode.TorrentManager.Monitor.DataBytesDownloaded;
+
+                        if (Settings.UseRatio)
+                        {
+                            if (ratio < Settings.SeedingRatio)
+                            {
+                                if (spannedTime.TotalHours < Settings.SeedingTimeHours) continue;
+                            }
+                        }
+                        else
                         {
                             if (spannedTime.TotalHours < Settings.SeedingTimeHours) continue;
-                        }                       
-                    }
-                    else
-                    {
-                        if (spannedTime.TotalHours < Settings.SeedingTimeHours) continue;
-                    }
-
-                    try
-                    {
-                        _ = episode.TorrentManager.StopAsync();
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine(ex.Message);
-                    }
-
-                }
-                int tries = 1;
-                DirectoryInfo torrentTempDir = new(episode.GetTempDownloadPath());
-                while (torrentTempDir.Exists)
-                {
-                    Thread.Sleep(2000);
-                    try
-                    {
-                        lock (episode)
-                        {
-                            episode.StatusDescription = "Cleaning - Try " + tries.ToString();
                         }
 
-                        torrentTempDir.Delete(true);
-                        tries++;
+                        try
+                        {
+                            _ = episode.TorrentManager.StopAsync();
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine(ex.Message);
+                        }
+
                     }
-                    catch (Exception ex)
+                    int tries = 1;
+                    DirectoryInfo torrentTempDir = new(episode.GetTempDownloadPath());
+                    while (torrentTempDir.Exists)
                     {
-                        Global.TaskAdmin.Logger.EX_Log($"Failed to clean file: {ex.Message}", "CleanEncodedFiles");
+                        Thread.Sleep(2000);
+                        try
+                        {
+                            lock (episode)
+                            {
+                                episode.StatusDescription = "Cleaning - Try " + tries.ToString();
+                            }
+
+                            torrentTempDir.Delete(true);
+                            tries++;
+                        }
+                        catch (Exception ex)
+                        {
+                            Global.TaskAdmin.Logger.EX_Log($"Failed to clean file: {ex.Message}", "CleanEncodedFiles");
+                        }
                     }
+                    Episodes.Remove(episode.Name);
+                    return;
                 }
-                Episodes.Remove(episode.Name);
-                return;
             }
+            catch (Exception ex)
+            {
+                Global.TaskAdmin.Logger.EX_Log(ex.Message, "CleanEncodedFiles");
+            }           
         }
 
 
