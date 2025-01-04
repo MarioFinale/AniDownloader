@@ -95,38 +95,45 @@ namespace AniDownloaderTerminal
         {
             while (true)
             {
-                foreach (DataRow row in Global.SeriesTable.Rows)
+                try
                 {
-                    string? sName = row["Name"].ToString();
-                    string? sPath = row["Path"].ToString();
-                    string? sFilter = row["Filter"].ToString();
-                    _ = int.TryParse(row["Offset"].ToString(), out int sOffset);
-                    if (sName == null) { continue; }
-                    if (sPath == null) { continue; }
-                    if (sPath == null) { continue; }
-                    if (sFilter == null) { continue; }
-                    Global.CurrentOpsQueue.Enqueue("Checking " + sName);
-                    if (!Directory.Exists(sPath)) Directory.CreateDirectory(sPath);
-                    Series series = new(sName, sPath, sOffset, sFilter);
-                    CurrentlyScanningSeries = "Scanning : " + sName;
-                    OnlineEpisodeElement[] filteredEpisodes = FilterFoundEpisodes(await series.GetAvailableSeriesEpisodes(), series);
-
-                    foreach (OnlineEpisodeElement episodeToDownload in filteredEpisodes)
+                    foreach (DataRow row in Global.SeriesTable.Rows)
                     {
-                        if (episodeToDownload.ProbableEpNumber == null) continue;
-                        int episodeNumber = (int)episodeToDownload.ProbableEpNumber;
-                        string episodeName = series.Name + " " + episodeNumber.ToString("00");
-                        if (CurrentSeriesDownloader.Episodes.ContainsKey(episodeName)) continue;
-                        CurrentSeriesDownloader.AddTorrentToDictionary(episodeToDownload.TorrentUrl, series.Path, episodeName, episodeNumber);
-                    }
-                }
+                        string? sName = row["Name"].ToString();
+                        string? sPath = row["Path"].ToString();
+                        string? sFilter = row["Filter"].ToString();
+                        _ = int.TryParse(row["Offset"].ToString(), out int sOffset);
+                        if (sName == null) { continue; }
+                        if (sPath == null) { continue; }
+                        if (sPath == null) { continue; }
+                        if (sFilter == null) { continue; }
+                        Global.CurrentOpsQueue.Enqueue("Checking " + sName);
+                        if (!Directory.Exists(sPath)) Directory.CreateDirectory(sPath);
+                        Series series = new(sName, sPath, sOffset, sFilter);
+                        CurrentlyScanningSeries = "Scanning : " + sName;
+                        OnlineEpisodeElement[] filteredEpisodes = FilterFoundEpisodes(await series.GetAvailableSeriesEpisodes(), series);
 
-                await Task.Run(() =>
+                        foreach (OnlineEpisodeElement episodeToDownload in filteredEpisodes)
+                        {
+                            if (episodeToDownload.ProbableEpNumber == null) continue;
+                            int episodeNumber = (int)episodeToDownload.ProbableEpNumber;
+                            string episodeName = series.Name + " " + episodeNumber.ToString("00");
+                            if (CurrentSeriesDownloader.Episodes.ContainsKey(episodeName)) continue;
+                            CurrentSeriesDownloader.AddTorrentToDictionary(episodeToDownload.TorrentUrl, series.Path, episodeName, episodeNumber);
+                        }
+                    }
+
+                    await Task.Run(() =>
+                    {
+                        CurrentlyScanningSeries = "Done scanning!";
+                        Thread.Sleep(1800000);
+                    });
+                    LoadSeriesTable();
+                }
+                catch (Exception ex)
                 {
-                    CurrentlyScanningSeries = "Done scanning!";
-                    Thread.Sleep(1800000);
-                });
-                LoadSeriesTable();
+                    Global.TaskAdmin.Logger.EX_Log(ex.Message, "UpdateSeries");
+                }
             }
         }
 
