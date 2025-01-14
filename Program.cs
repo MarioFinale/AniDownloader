@@ -456,7 +456,7 @@ namespace AniDownloaderTerminal
                 }
 
                 if (!Global.CurrentStatusTable.Columns.Contains("Progress")){
-                    Global.CurrentStatusTable.Columns.Add(new DataColumn("Progress", typeof(int)));
+                    Global.CurrentStatusTable.Columns.Add(new DataColumn("Progress", typeof(string)));
                 }
 
                 Global.CurrentStatusTable.Columns[0].SetWidth(20);
