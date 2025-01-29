@@ -110,6 +110,7 @@ namespace AniDownloaderTerminal
                 pageData = File.ReadAllText(Path.Join(Global.Exepath, "SettingsPage.htm")).Replace("==========TABLE HERE===========", ConvertSeriesDataTableToHTML(Global.SeriesTable));
                 pageData = pageData.Replace("MaxFileSizeMb-replace", Settings.MaxFileSizeMb.ToString());
                 pageData = pageData.Replace("RPSDelayMs-replace", Settings.RPSDelayMs.ToString());
+                pageData = pageData.Replace("TooFewSeeders-replace", Settings.TooFewSeeders.ToString());
                 pageData = pageData.Replace("TooOldDays-replace", Settings.TooOldDays.ToString());
                 pageData = pageData.Replace("TooNewMinutes-replace", Settings.TooNewMinutes.ToString());
                 pageData = pageData.Replace("SeedingTimeHours-replace", Settings.SeedingTimeHours.ToString());

@@ -14,6 +14,8 @@ namespace AniDownloaderTerminal
         public string Category { get; }
         public decimal SizeMiB { get; }
         public string ProbableRes { get; }
+        public int Seeders { get; }
+
         private int _ProbableEpNumber;
         public int? ProbableEpNumber { get { return _ProbableEpNumber; } }
         public Lang ProbableLang { get; set; }
@@ -23,11 +25,13 @@ namespace AniDownloaderTerminal
         public bool IsTooOld { get { return _IsTooOld; } }
         private bool _IsTooNew;
         public bool IsTooNew { get { return _IsTooNew; } }
+        public bool TooFewSeeders { get { return _TooFewSeeders; } }
+        private bool _TooFewSeeders;
 
 
         public OnlineEpisodeElement(string webCode)
         {
-            var match = Regex.Match(webCode, "<pubDate>(.+)<\\/pubDate>[\\s\\S]+?CDATA.+?#(\\d{1,8}) \\| (.+?)<\\/a\\> \\| (.+?) \\| (.+?) \\| (.+?)\\]");
+            Match match = Regex.Match(webCode, "<pubDate>(.+)<\\/pubDate>[\\s\\S]+?CDATA.+?#(\\d{1,8}) \\| (.+?)<\\/a\\> \\| (.+?) \\| (.+?) \\| (.+?)\\]");
 
             if (!match.Success)
                 throw new InvalidDataException("Input string does not match nyaa.si cdata description format.");
@@ -36,6 +40,7 @@ namespace AniDownloaderTerminal
             Name = match.Groups[3].Value.Trim();
             string sizeStr = match.Groups[4].Value.Trim();
             SizeMiB = Global.ParseFileSize(sizeStr);
+            Seeders = parseSeeders(webCode);
             Category = match.Groups[5].Value.Trim();
             Hash = match.Groups[6].Value.Trim();
 
@@ -43,17 +48,28 @@ namespace AniDownloaderTerminal
             TorrentUrl = $"https://nyaa.si/download/{Id}.torrent";
             ProbableLang = Lang.Undefined;
             ProbableRes = DetermineResolution();
-            _IsTooOld = _IsTooNew = false;
+            _IsTooOld = _TooFewSeeders = false;
+            _TooFewSeeders = Settings.TooFewSeeders >= Seeders;
             SetAgeFromPubDate(match.Groups[1].Value.Trim());
             SetEpisodeNumber();
             DetermineLanguage();
         }
 
+        private int parseSeeders(string webcode) {
+            Match match = Regex.Match(webcode, "\\<nyaa\\:seeders\\>(\\d+)\\<\\/nyaa\\:seeders\\>");
+            if (match.Success) { 
+                string seedersString = match.Groups[1].Value.Trim();
+                return int.Parse(seedersString);
+            }
+            return 0;
+        }
+
         private string DetermineResolution()
         {
-            var resMatch = Regex.Match(Name, @"(\d{3,4})[pi]");
+            Match resMatch = Regex.Match(Name, @"(\d{3,4})[pi]");
             return resMatch.Success ? resMatch.Value.Trim() : SizeMiB > 500 ? "1080p" : "720p";
         }
+
 
         private void SetAgeFromPubDate(string pubdate)
         {

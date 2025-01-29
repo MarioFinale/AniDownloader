@@ -102,6 +102,7 @@ namespace AniDownloaderTerminal
                 if (!element.IsAnime) continue;
                 if (element.IsTooOld) continue;
                 if (element.IsTooNew) continue;
+                if (element.TooFewSeeders) continue;
                 if (!String.IsNullOrWhiteSpace(Filter))
                 {
                     if (Regex.Match(element.Name, Filter).Success) continue;

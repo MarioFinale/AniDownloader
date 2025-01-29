@@ -170,7 +170,11 @@ namespace AniDownloaderTerminal
 
                     if (!Global.DownloadFileToPath(episode.TorrentURL, torrentFilePath)) continue;
                     Torrent torrent = Torrent.Load(torrentFilePath);
-                    TorrentManager manager = Task.Run(() => engine.AddAsync(torrentFilePath, tempDownloadDirPath)).Result;
+
+                    TorrentManager? manager = GetEngineTorrentManagerByPath(torrentFilePath, tempDownloadDirPath);
+                    if (manager == null) {
+                        manager = Task.Run(() => engine.AddAsync(torrentFilePath, tempDownloadDirPath)).Result;
+                    }
 
                     lock (episode)
                     {
@@ -182,7 +186,10 @@ namespace AniDownloaderTerminal
                         episode.TorrentManager.TrackerManager.AnnounceComplete += (o, e) => TorrentTrackerManagerAnnounceCompleteDelegate(e, episode);
                         _ = Task.Run(() =>
                         {
-                            episode.TorrentManager.StartAsync();
+                            if (episode.TorrentManager.State != TorrentState.Stopped) {
+                                episode.TorrentManager.StartAsync();
+                            }
+                            
                         });
                         episode.SetState(EpisodeToDownload.State.Downloading);
                         episode.StatusDescription = "Downloading";
@@ -193,6 +200,17 @@ namespace AniDownloaderTerminal
             {
                 Global.TaskAdmin.Logger.EX_Log(ex.Message, "StartDownloads");
             }
+        }
+
+        public TorrentManager? GetEngineTorrentManagerByPath(string metadataPath, string saveDirectory)
+        {
+            foreach (TorrentManager torrentManager in engine.Torrents) {
+                string dir = torrentManager.SavePath;
+                string met = torrentManager.MetadataPath;
+                if (metadataPath.Equals(met) && saveDirectory.Equals(dir)) return torrentManager;            
+            }
+            return null;
+
         }
 
         public void StartConvertions()
@@ -295,7 +313,8 @@ namespace AniDownloaderTerminal
             catch (Exception ex)
             {
                 Global.TaskAdmin.Logger.EX_Log(ex.Message, "CleanEncodedFiles");
-            }           
+            }
+
         }
 
 

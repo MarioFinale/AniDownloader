@@ -14,11 +14,11 @@ namespace AniDownloaderTerminal
 
         public static ulong RPSDelayMs { get => _RPSDelayMs; set => _RPSDelayMs = value; }
         static ulong _RPSDelayMs = 1500;
-
+        public static int TooFewSeeders { get => _TooFewSeeders; set => _TooFewSeeders = value; }
+        static int _TooFewSeeders = 1;
 
         public static ulong TooOldDays { get => _TooOldDays; set => _TooOldDays = value; }
         static ulong _TooOldDays = 60;
-
 
         public static ulong TooNewMinutes { get => _TooNewMinutes; set => _TooNewMinutes = value; }
         static ulong _TooNewMinutes = 120;
@@ -97,6 +97,7 @@ namespace AniDownloaderTerminal
 
                 TryUpdateSetting(settingValues, "MaxFileSizeMb", ref _MaxFileSizeMb);
                 TryUpdateSetting(settingValues, "RPSDelayMs", ref _RPSDelayMs);
+                TryUpdateSetting(settingValues, "TooFewSeeders", ref _TooFewSeeders);
                 TryUpdateSetting(settingValues, "TooOldDays", ref _TooOldDays);
                 TryUpdateSetting(settingValues, "TooNewMinutes", ref _TooNewMinutes);
                 TryUpdateSetting(settingValues, "SeedingTimeHours", ref _SeedingTimeHours);
