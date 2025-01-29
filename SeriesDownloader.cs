@@ -329,12 +329,12 @@ namespace AniDownloaderTerminal
             {
                 File.Delete(finalEpisodeName);
             }
-            string args;
+            string args = string.Empty;
             if (Settings.UseTranscodingHWAccel)
             {
                 args = "-hwaccel auto ";
             }
-             args = "-i \"" + filetoConvert + "\" -y " + Settings.OutputTranscodeCommandLineArguments + " \"" + finalEpisodeName + "\"";
+             args += "-i \"" + filetoConvert + "\" -y " + Settings.OutputTranscodeCommandLineArguments + " \"" + finalEpisodeName + "\"";
 
             lock (episode)
             {
