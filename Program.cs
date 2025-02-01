@@ -50,7 +50,7 @@ namespace AniDownloaderTerminal
 
             bool StartConvertionsTask()
             {
-                CurrentSeriesDownloader.StartConvertions();
+                CurrentSeriesDownloader.StartConversions();
                 return true;
             }
 
@@ -257,7 +257,7 @@ namespace AniDownloaderTerminal
                         row[2] = episodeElement.StatusDescription;
                         if (episodeElement.GetState == State.EncodedSeeding)
                         {                          
-                            row[3] = "R:" + episodeElement.GetTorrentRatio();
+                            row[3] = "R:" + episodeElement.GetTorrentRatio().ToString("0.00");
                         }
                         else
                         {

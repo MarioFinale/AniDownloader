@@ -116,7 +116,7 @@ namespace AniDownloaderTerminal
             {
                 if (TorrentManager != null)
                 {
-                    double ratio = TorrentManager.Monitor.DataBytesUploaded / TorrentManager.Monitor.DataBytesDownloaded;
+                    double ratio = (double)TorrentManager.Monitor.DataBytesUploaded / (double)TorrentManager.Monitor.DataBytesDownloaded;
                     return ratio;
                 }
                 return 0;
@@ -172,9 +172,7 @@ namespace AniDownloaderTerminal
                     Torrent torrent = Torrent.Load(torrentFilePath);
 
                     TorrentManager? manager = GetEngineTorrentManagerByPath(torrentFilePath, tempDownloadDirPath);
-                    if (manager == null) {
-                        manager = Task.Run(() => engine.AddAsync(torrentFilePath, tempDownloadDirPath)).Result;
-                    }
+                    manager ??= Task.Run(() => engine.AddAsync(torrentFilePath, tempDownloadDirPath)).Result;
 
                     lock (episode)
                     {
@@ -186,10 +184,8 @@ namespace AniDownloaderTerminal
                         episode.TorrentManager.TrackerManager.AnnounceComplete += (o, e) => TorrentTrackerManagerAnnounceCompleteDelegate(e, episode);
                         _ = Task.Run(() =>
                         {
-                            if (episode.TorrentManager.State != TorrentState.Stopped) {
-                                episode.TorrentManager.StartAsync();
-                            }
-                            
+                            episode.TorrentManager.StartAsync();
+
                         });
                         episode.SetState(EpisodeToDownload.State.Downloading);
                         episode.StatusDescription = "Downloading";
@@ -213,25 +209,36 @@ namespace AniDownloaderTerminal
 
         }
 
-        public void StartConvertions()
+        public void StartConversions()
         {
             try
             {
-                foreach (KeyValuePair<string, EpisodeToDownload> pair in Episodes)
+                foreach (var pair in Episodes)
                 {
-                    if (!pair.Value.EpisodeState.Equals(EpisodeToDownload.State.DownloadedSeeding)) continue;
-                    EpisodeToDownload episode = pair.Value;
-                    string fileToConvertPath = string.Empty;
+                    if (pair.Value.EpisodeState != EpisodeToDownload.State.DownloadedSeeding) continue;
 
-                    foreach (string file in Directory.EnumerateFiles(episode.GetTempDownloadPath()))
-                    {
-                        if (Path.GetExtension(file).ToLowerInvariant().Equals(".mp4") | Path.GetExtension(file).ToLowerInvariant().Equals(".mkv"))
-                        {
-                            fileToConvertPath = file;
-                        }
-                    }
-                    if (string.IsNullOrWhiteSpace(fileToConvertPath)) continue;
-                    ConvertFile(episode, fileToConvertPath);
+                    var episode = pair.Value;
+                    int episodeNumber = episode.Number;
+
+                    // Regex with word boundary for better accuracy
+                    Regex episodeNumberRegex = new($@"\b{episodeNumber}\d{{0,2}}\b", RegexOptions.Compiled);
+
+                    // Fetch all candidate files
+                    var candidateFiles = Directory
+                        .GetFiles(episode.GetTempDownloadPath(), "*", SearchOption.AllDirectories)
+                        .Where(file => new[] { ".mp4", ".mkv" }.Contains(Path.GetExtension(file)?.ToLowerInvariant()))
+                        .ToList();
+
+                    // Sort based on regex match and closest number
+                    var sortedFiles = candidateFiles
+                        .OrderByDescending(file => episodeNumberRegex.IsMatch(Path.GetFileNameWithoutExtension(file)))
+                        .ThenBy(file => Math.Abs(GetLastNumber(Path.GetFileNameWithoutExtension(file)) - episodeNumber))
+                        .ToList();
+
+                    if (!sortedFiles.Any()) continue;
+
+                    ConvertFile(episode, sortedFiles[0]);
+
                     lock (episode)
                     {
                         episode.SetState(EpisodeToDownload.State.EncodedSeeding);
@@ -242,9 +249,14 @@ namespace AniDownloaderTerminal
             }
             catch (Exception ex)
             {
-                Global.TaskAdmin.Logger.EX_Log(ex.Message, "StartConvertions");
+                Global.TaskAdmin.Logger.EX_Log(ex.Message, "StartConversions");
             }
-            
+        }
+
+        private static int GetLastNumber(string fileName)
+        {
+            var parts = fileName.Split(new[] { ' ', '-', '_' }, StringSplitOptions.RemoveEmptyEntries);
+            return parts.Reverse().FirstOrDefault(part => int.TryParse(part, out _)) is string numStr && int.TryParse(numStr, out int num) ? num : int.MaxValue;
         }
 
         public void CleanEncodedFiles()
