@@ -4,6 +4,7 @@ using System.Diagnostics;
 using MonoTorrent.Client.Tracker;
 using System.Text.RegularExpressions;
 using static AniDownloaderTerminal.SeriesDownloader.EpisodeToDownload;
+using Mono.Nat.Logging;
 
 namespace AniDownloaderTerminal
 {
@@ -141,6 +142,15 @@ namespace AniDownloaderTerminal
             EpisodeToDownload episode = new(downloadurl, episodeName, downloadPath, episodeNumber);
             lock (Episodes)
             {
+                foreach (EpisodeToDownload ep in Episodes.Values)
+                {
+                    if (ep.TorrentURL.Equals(episode.TorrentURL))
+                    {
+                        Global.TaskAdmin.Logger.Log("Duplicate torrent URL detected for '" + episode.Name + "' Skipping...", "AddTorrentToDictionary");
+                        return;
+                    }
+                    
+                }
                 Episodes.Add(episode.Name, episode);
             }
         }

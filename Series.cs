@@ -18,7 +18,7 @@ namespace AniDownloaderTerminal
             if (name == null) throw new ArgumentNullException(name);
             if (path == null) throw new ArgumentNullException(path);
             if (!Directory.Exists(path)) throw new DirectoryNotFoundException(path);
-            Name = ReplaceIllegalCharacters(name);
+            Name = ReplaceIllegalCharacters(name).Trim();
             Path = path;
             Offset = offset;
             Filter = filter;
@@ -40,12 +40,25 @@ namespace AniDownloaderTerminal
             Filter = filter;
         }
 
+
+        public string[] GetAllEpisodeFiles()
+        {
+            HashSet<string> episodes = new();
+            HashSet<string> validExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".mkv", ".mp4" };
+            foreach (string fileName in Directory.GetFiles(Path))
+            {
+                if (validExtensions.Contains(System.IO.Path.GetExtension(fileName))) episodes.Add(fileName);
+
+            }
+            return episodes.ToArray();
+        }
+
         public int[] GetEpisodesDownloaded()
         {
            HashSet<int> episodes = new();
            foreach (string fileName in Directory.GetFiles(Path))
             {
-                Match match = Regex.Match(fileName, @"(\d{2,3})\.(?:mp4|mkv)");
+                Match match = Regex.Match(fileName, @"(\d{2,3})\.(?:mp4|mkv)", RegexOptions.IgnoreCase);
                 if (match.Success)
                 {
                     string epNumStr = match.Groups[1].Value;

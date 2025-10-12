@@ -57,13 +57,13 @@ namespace AniDownloaderTerminal
         static string _UncensoredEpisodeRegex = "[Uu]ncensored|[Ss]in *[Cc]ensura";
 
         public static string CustomLanguageNameRegex { get => _CustomLanguageNameRegex; set => _CustomLanguageNameRegex = value; }
-        static string _CustomLanguageNameRegex = @"[^\w]esp\w*|spanish|español";
+        static string _CustomLanguageNameRegex = @"[^\w]esp[^\w]|spa[^\w]| es[^\w]|[Ee]spañol|[Ss]panish";
 
         public static string CustomLanguageDescriptionRegex { get => _CustomLanguageDescriptionRegex; set => _CustomLanguageDescriptionRegex = value; }
-        static string _CustomLanguageDescriptionRegex = @"[^\w]esp[^\w]|spa[^\w]| es[^\w]|español|spanish";
+        static string _CustomLanguageDescriptionRegex = @"[^\w]esp[^\w]|spa[^\w]| es[^\w]|[Ee]spañol|[Ss]panish";
 
         public static string OutputTranscodeCommandLineArguments { get => _OutputTranscodeCommandLineArguments; set => _OutputTranscodeCommandLineArguments = value; }
-        static string _OutputTranscodeCommandLineArguments = "-map 0 -map -0:d? -disposition:s:0 default -scodec copy -c:a aac -ac 2 -b:a 320k -vcodec libx264 -crf 25 -preset slow -movflags faststart -tune fastdecode -pix_fmt yuv420p -vf \"crop=trunc(iw/2)*2:trunc(ih/2)*2\"";
+        static string _OutputTranscodeCommandLineArguments = "-map 0 -map -0:d? -disposition:s:0 default -scodec copy -c:a aac -ac 2 -b:a 320k -vcodec libx264 -crf 25 -preset slow -colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv -movflags faststart -tune fastdecode -pix_fmt yuv420p -vf \"crop=trunc(iw/2)*2:trunc(ih/2)*2\"";
         
         private bool InvalidSettings = false;
 
