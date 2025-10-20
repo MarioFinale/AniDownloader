@@ -1,1 +1,2 @@
-dotnet publish -c Release -r linux-x64 --self-contained /p:PublishSingleFile=true /p:PublishSelfContained=true -o ./bin/unix/
+@echo off
+dotnet publish AniDownloaderTerminal.csproj -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -o ./bin/unix/

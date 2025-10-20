@@ -1,12 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Data;
-using System.Linq;
+﻿using System.Data;
 using System.Net;
+using System.Net.Sockets;
 using System.Text;
-using System.Threading.Tasks;
-using System.Xml.Linq;
-using static System.Net.Mime.MediaTypeNames;
 
 namespace AniDownloaderTerminal
 {
@@ -36,6 +31,63 @@ namespace AniDownloaderTerminal
                 if (req is null) return;
 
 
+                /* WIP: BASIC SECURITY 
+                // IP Restriction: Get remote IP
+                IPAddress remoteIp = ctx.Request.RemoteEndPoint.Address;
+                if (remoteIp.IsIPv4MappedToIPv6) remoteIp = remoteIp.MapToIPv4();  // Handle IPv6-mapped IPv4
+
+                // Allow loopback
+                if (!remoteIp.Equals(IPAddress.Loopback) || !remoteIp.Equals(IPAddress.IPv6Loopback))
+                {
+                    // Get local IPv4 subnet prefix (e.g., "192.168.1.")
+                    var localAddresses = Dns.GetHostEntry(Dns.GetHostName()).AddressList
+                        .Where(addr => addr.AddressFamily == AddressFamily.InterNetwork)  // IPv4 only
+                        .ToArray();
+
+                    if (localAddresses.Length == 0)
+                    {
+                        // No local IPv4 found; log and deny
+                        resp.StatusCode = 403;  // Forbidden
+                        resp.Close();
+                        continue;
+                    }
+
+                    // Assume first local IPv4 and /24 subnet
+                    string localIp = localAddresses[0].ToString();
+                    string subnetPrefix = string.Join(".", localIp.Split('.').Take(3)) + ".";
+
+                    string remoteIpStr = remoteIp.ToString();
+                    if (!remoteIpStr.StartsWith(subnetPrefix))
+                    {
+                        Global.TaskAdmin.Logger.EX_Log($"Access denied from IP: {remoteIpStr}", "HandleIncomingConnections");
+                        resp.StatusCode = 403;  // Forbidden
+                        resp.Close();
+                        continue;
+                    }
+                }
+
+                // Validate Basic Auth credentials
+                if (ctx.User == null || ctx.User.Identity == null || !ctx.User.Identity.IsAuthenticated)
+                {
+                    resp.StatusCode = 401;  // Unauthorized
+                    resp.Headers.Add("WWW-Authenticate", "Basic realm=\"Secure Area\"");
+                    resp.Close();
+                    continue;
+                }
+
+                HttpListenerBasicIdentity identity = (HttpListenerBasicIdentity)ctx.User.Identity;
+                string username = identity.Name;  // From settings
+                string password = identity.Password;  // From settings
+
+                if (username != Settings.UserName || password != Settings.Password)
+                {
+                    resp.StatusCode = 401;  // Unauthorized
+                    resp.Headers.Add("WWW-Authenticate", "Basic realm=\"Secure Area\"");
+                    resp.Close();
+                    continue;
+                }
+                */
+
                 string responseData = string.Empty;
 
                 if ((req.HttpMethod == "POST") && (req.Url != null) && (req.Url.AbsolutePath == "/update"))
@@ -43,8 +95,8 @@ namespace AniDownloaderTerminal
                     using var reader = new StreamReader(req.InputStream, req.ContentEncoding);
                     string text = reader.ReadToEnd();
                     string[] webParams = text.Split("&").Select(x => System.Web.HttpUtility.UrlDecode(x)).ToArray();
-                  
-                    Dictionary<int,WebTable> paramsDic = new();
+
+                    Dictionary<int, WebTable> paramsDic = new();
                     try
                     {
                         foreach (string postParam in webParams)
@@ -79,20 +131,23 @@ namespace AniDownloaderTerminal
                             }
                         }
 
-                        Global.SeriesTable.Rows.Clear();
 
-                        foreach (KeyValuePair<int, WebTable> pair in paramsDic)
+                        lock (Global.SeriesTable)
                         {
-                            Global.SeriesTable.Rows.Add(pair.Value.Name, pair.Value.Path, pair.Value.Offset, pair.Value.Filter);
+                            Global.SeriesTable.Rows.Clear();
+                            foreach (KeyValuePair<int, WebTable> pair in paramsDic)
+                            {
+                                Global.SeriesTable.Rows.Add(pair.Value.Name, pair.Value.Path, pair.Value.Offset, pair.Value.Filter);
+                            }
+                            Global.SeriesTable.WriteXml(Global.SeriesTableFilePath, XmlWriteMode.WriteSchema);
                         }
-                        Global.SeriesTable.WriteXml(Global.SeriesTableFilePath, XmlWriteMode.WriteSchema);
 
                     }
                     catch (Exception)
                     {
                         Global.TaskAdmin.Logger.EX_Log($"Error handling POST data.", "HandleIncomingConnections");
                     }
-                   
+
 
                 }
 
@@ -104,7 +159,7 @@ namespace AniDownloaderTerminal
                     File.WriteAllLines(Global.SettingsPath, webParams);
                     Program.settings.LoadAndValidateSettingsFile();
                 }
-                               
+
 
 
                 pageData = File.ReadAllText(Path.Join(Global.Exepath, "SettingsPage.htm")).Replace("==========TABLE HERE===========", ConvertSeriesDataTableToHTML(Global.SeriesTable));
@@ -155,7 +210,7 @@ namespace AniDownloaderTerminal
                 {
                     pageData = pageData.Replace("<!--UseTranscodingHWAccelTrueSelected-->", "");
                     pageData = pageData.Replace("<!--UseTranscodingHWAccelFalseSelected-->", "selected");
-                }                
+                }
                 if (Settings.UseCustomLanguage)
                 {
                     pageData = pageData.Replace("<!--UseCustomLanguageTrueSelected-->", "selected");
@@ -210,11 +265,11 @@ namespace AniDownloaderTerminal
                     {
                         Global.TaskAdmin.Logger.EX_Log($"currentoperation Error: {ex.Message}", "HandleIncomingConnections");
                     }
-                    
+
                     resp.ContentType = "text/html";
                 }
 
-                byte[] data = Encoding.UTF8.GetBytes(responseData);                
+                byte[] data = Encoding.UTF8.GetBytes(responseData);
                 resp.ContentEncoding = Encoding.UTF8;
                 resp.ContentLength64 = data.LongLength;
                 await resp.OutputStream.WriteAsync(data);
@@ -243,6 +298,7 @@ namespace AniDownloaderTerminal
                 try
                 {
                     listener.Prefixes.Add(url);
+                    listener.AuthenticationSchemes = AuthenticationSchemes.Basic;
                     listener.Start();
                     // Handle requests
                     Task listenTask = HandleIncomingConnections(listener);
@@ -257,18 +313,24 @@ namespace AniDownloaderTerminal
                 listener.Close();
                 return true;
             }
-            Global.TaskAdmin.NewTask("WebServer", "WebServer", WebServer, 1000, true, true);          
+            Global.TaskAdmin.NewTask("WebServer", "WebServer", WebServer, 1000, true, true);
         }
 
-        private static string ConvertSeriesDataTableToHTML(DataTable dt)
+        private static string ConvertSeriesDataTableToHTML(DataTable table)
         {
+            DataTable dt;
+            lock (table)
+            {
+                dt = table.Clone(); //Clone the dataTable to avoid collection modified exceptions.
+            }
+
             string html = $"<table id=\"{dt.TableName}\" class=\"table\">";
             html += "<thead>";
             html += "<tr>";
             for (int i = 0; i < dt.Columns.Count; i++)
             {
                 html += "<th scope=\"col\">" + dt.Columns[i].ColumnName + "</th>";
-            }                
+            }
             html += "</tr>";
             html += "</thead>";
 
@@ -278,7 +340,7 @@ namespace AniDownloaderTerminal
                 html += $"<tr id=\"sr_{i}\">";
                 for (int j = 0; j < dt.Columns.Count; j++)
                 {
-                    html += $"<td><input style=\"width:105%; padding:inherit; box-sizing:border-box;\" type=\"text\" name=\"{dt.Columns[j].ColumnName}-{i}\" value=\"{dt.Rows[i][j]}\"/></td>";                 
+                    html += $"<td><input style=\"width:105%; padding:inherit; box-sizing:border-box;\" type=\"text\" name=\"{dt.Columns[j].ColumnName}-{i}\" value=\"{dt.Rows[i][j]}\"/></td>";
                 }
 
                 html += $"<td><button id=\"del-{i}\" type=\"button\" onclick=\"deleteRow({i})\">x</button></td>";
@@ -289,8 +351,13 @@ namespace AniDownloaderTerminal
             return html;
         }
 
-        private static string ConvertStatusDataTableToHTML(DataTable dt)
+        private static string ConvertStatusDataTableToHTML(DataTable table)
         {
+            DataTable dt;
+            lock (table)
+            {
+                dt = table.Clone(); //Clone the dataTable to avoid collection modified exceptions.
+            }
             string html = "";
             for (int i = 0; i < dt.Rows.Count; i++)
             {

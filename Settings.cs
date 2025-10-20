@@ -64,7 +64,12 @@ namespace AniDownloaderTerminal
 
         public static string OutputTranscodeCommandLineArguments { get => _OutputTranscodeCommandLineArguments; set => _OutputTranscodeCommandLineArguments = value; }
         static string _OutputTranscodeCommandLineArguments = "-map 0 -map -0:d? -disposition:s:0 default -scodec copy -c:a aac -ac 2 -b:a 320k -vcodec libx264 -crf 25 -preset slow -colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv -movflags faststart -tune fastdecode -pix_fmt yuv420p -vf \"crop=trunc(iw/2)*2:trunc(ih/2)*2\"";
-        
+        public static string UserName { get => _UserName; set => _UserName = value; }
+        static string _UserName = "admin";
+        public static string Password { get => _Password; set => _Password = value; }
+        static string _Password = "changeme";
+
+
         private bool InvalidSettings = false;
 
         private readonly Dictionary<string, DateTime> LastWriteTimes = new();
@@ -114,6 +119,8 @@ namespace AniDownloaderTerminal
                 TryUpdateSetting(settingValues, "UseCustomLanguage", ref _UseCustomLanguage);
                 TryUpdateSetting(settingValues, "OutputTranscodeCommandLineArguments", ref _OutputTranscodeCommandLineArguments);
                 TryUpdateSetting(settingValues, "UseTranscodingHWAccel", ref _UseTranscodingHWAccel);
+                TryUpdateSetting(settingValues, "UserName", ref _UserName);
+                TryUpdateSetting(settingValues, "Password", ref _Password);
 
                 if (InvalidSettings)
                 {

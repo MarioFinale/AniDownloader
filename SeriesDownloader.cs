@@ -1,10 +1,11 @@
-﻿using MonoTorrent.Client;
+﻿using Mono.Nat.Logging;
 using MonoTorrent;
-using System.Diagnostics;
+using MonoTorrent.Client;
 using MonoTorrent.Client.Tracker;
+using System;
+using System.Diagnostics;
 using System.Text.RegularExpressions;
 using static AniDownloaderTerminal.SeriesDownloader.EpisodeToDownload;
-using Mono.Nat.Logging;
 
 namespace AniDownloaderTerminal
 {
@@ -343,7 +344,6 @@ namespace AniDownloaderTerminal
         public bool ConvertFile(EpisodeToDownload episode, string filetoConvert)
         {
             string extensionToUse = Path.GetExtension(filetoConvert);
-
             if (!File.Exists(filetoConvert))
                 return false;
             string finalEpisodeName = episode.GetEpisodeFilePathWitoutExtension() + extensionToUse;
@@ -356,15 +356,13 @@ namespace AniDownloaderTerminal
             {
                 args = "-hwaccel auto ";
             }
-             args += "-i \"" + filetoConvert + "\" -y " + Settings.OutputTranscodeCommandLineArguments + " \"" + finalEpisodeName + "\"";
-
+            args += "-i \"" + filetoConvert + "\" -y " + Settings.OutputTranscodeCommandLineArguments + " \"" + finalEpisodeName + "\"";
             lock (episode)
             {
                 episode.SetState(EpisodeToDownload.State.ReEncoding);
                 episode.StatusPercentage = 0;
                 episode.StatusDescription = "Re-Encoding";
             }
-
             using Process p = new();
             {
                 var withBlock = p;
@@ -376,50 +374,135 @@ namespace AniDownloaderTerminal
                 withBlock.StartInfo.CreateNoWindow = true;
                 withBlock.OutputDataReceived += (o, e) => EncoderDataRecievedEventHandlerDelegate(e, episode);
                 withBlock.ErrorDataReceived += (o, e) => EncoderDataRecievedEventHandlerDelegate(e, episode);
+                CurrentlyEncodingVideoDurationFound = false;
+                CurrentlyEncodingVideoDuration = new TimeSpan(0);
+                CurrentlyEncodingVideoPosition = new TimeSpan(0);
                 withBlock.Start();
                 withBlock.BeginOutputReadLine();
                 withBlock.BeginErrorReadLine();
                 withBlock.WaitForExit();
-                CurrentlyEncodingVideoDurationFound = false;
-                CurrentlyEncodingVideoDuration = new TimeSpan(0);
-                CurrentlyEncodingVideoPosition = new TimeSpan(0);
+
+                if (withBlock.ExitCode != 0)
+                {
+                    Global.TaskAdmin.Logger.EX_Log("Exit code '" + withBlock.ExitCode + "' on ffmpeg for '" + finalEpisodeName + "'. Conversion failed.", "ConvertFile");
+                    try
+                    {
+                        if (File.Exists(finalEpisodeName)) File.Delete(finalEpisodeName);
+                        Global.TaskAdmin.Logger.EX_Log("'" + finalEpisodeName + "'. Was deleted successfully.", "ConvertFile");
+                    }
+                    catch (IOException ex)
+                    {
+                        Global.TaskAdmin.Logger.EX_Log("Error cleaning errored output file for '" + finalEpisodeName + "'. Manual cleaning is neccesary.", "ConvertFile");
+                        Global.TaskAdmin.Logger.EX_Log("EX message:" + ex.Message, "ConvertFile");
+                    }
+                    return false;
+                }
             }
+            CurrentlyEncodingVideoDurationFound = false;
+            CurrentlyEncodingVideoDuration = TimeSpan.Zero;
+            CurrentlyEncodingVideoPosition = TimeSpan.Zero;
+
+            if (!extensionToUse.TrimStart('.').ToLowerInvariant().Equals("mkv")) return true;
+
+            // Optimize with mkvmerge
+            string tempOptimizedName = finalEpisodeName + ".temp.mkv";
+            if (File.Exists(tempOptimizedName))
+            {
+                File.Delete(tempOptimizedName);
+            }
+            lock (episode)
+            {
+                episode.StatusDescription = "Optimizing MKV";
+                episode.StatusPercentage = 0;
+            }
+            using Process mkvProcess = new();
+            {
+                var withBlock = mkvProcess;
+                withBlock.StartInfo.UseShellExecute = false;
+                withBlock.StartInfo.FileName = "mkvmerge";
+                withBlock.StartInfo.Arguments = "-o \"" + tempOptimizedName + "\" --clusters-in-meta-seek \"" + finalEpisodeName + "\"";
+                withBlock.StartInfo.RedirectStandardError = true;
+                withBlock.StartInfo.RedirectStandardOutput = true;
+                withBlock.StartInfo.CreateNoWindow = true;
+                withBlock.OutputDataReceived += (o, e) => EncoderDataRecievedEventHandlerDelegate(e, episode);
+                withBlock.ErrorDataReceived += (o, e) => EncoderDataRecievedEventHandlerDelegate(e, episode);
+                withBlock.Start();
+                withBlock.BeginOutputReadLine();
+                withBlock.BeginErrorReadLine();
+                withBlock.WaitForExit();
+                lock (episode)
+                {
+                    episode.StatusDescription = "Finished Optimizing MKV";
+                    episode.StatusPercentage = 100;
+                }
+                if (withBlock.ExitCode != 0)
+                {
+                    Global.TaskAdmin.Logger.EX_Log("Exit code '" + withBlock.ExitCode + "' on mkvmerge for '" + tempOptimizedName + "'. Using unoptimized version instead...", "ConvertFile");
+                    try
+                    {
+                        if (File.Exists(tempOptimizedName)) File.Delete(tempOptimizedName);
+                        Global.TaskAdmin.Logger.EX_Log("'" + tempOptimizedName + "'. Was deleted successfully.", "ConvertFile");
+                    }
+                    catch (IOException ex)
+                    {
+                        Global.TaskAdmin.Logger.EX_Log("Error cleaning temp file for '" + tempOptimizedName + "'. Manual cleaning is neccesary.", "ConvertFile");
+                        Global.TaskAdmin.Logger.EX_Log("EX message:" + ex.Message, "ConvertFile");
+                    }
+
+                    return true;
+                }
+            }
+            File.Delete(finalEpisodeName);
+            File.Move(tempOptimizedName, finalEpisodeName);
             return true;
         }
 
         private void EncoderDataRecievedEventHandlerDelegate(DataReceivedEventArgs e, EpisodeToDownload episode)
         {
             if (e.Data == null) return;
-            string ttext = e.Data;
-            if (ttext == null)
-                return;
+            string ttext = e.Data.Trim();
+            if (string.IsNullOrEmpty(ttext)) return;
 
             if (!CurrentlyEncodingVideoDurationFound)
             {
-                if (ttext.Contains("Duration"))
+                if (ttext.Contains("Duration", StringComparison.OrdinalIgnoreCase))
                 {
                     CurrentlyEncodingVideoDuration = GetDurationFromStderr(ttext);
-                    if (!(CurrentlyEncodingVideoDuration.Ticks == 0))
-                        CurrentlyEncodingVideoDurationFound = true;
+                    if (CurrentlyEncodingVideoDuration.Ticks != 0) CurrentlyEncodingVideoDurationFound = true;
                 }
             }
-
-            if (ttext.Contains("frame="))
+            if (ttext.Contains("frame=", StringComparison.OrdinalIgnoreCase))
             {
                 Tuple<TimeSpan, decimal> durationAndSpeed = GetCurrentTimeAndSpeed(ttext);
-                if ((durationAndSpeed.Item1.Ticks.Equals(0) | durationAndSpeed.Item2.Equals(0M)))
-                    return;
+                if (durationAndSpeed.Item1.Ticks == 0 || durationAndSpeed.Item2 == 0M) return;
                 CurrentlyEncodingVideoPosition = durationAndSpeed.Item1;
+                double dpercent = ((CurrentlyEncodingVideoPosition.TotalSeconds + 1) * 100D) / (CurrentlyEncodingVideoDuration.TotalSeconds + 1);
+                int percentage = Convert.ToInt32(Math.Abs(dpercent));
+                if (percentage > 100) percentage = 100;
+                lock (episode)
+                {
+                    episode.StatusPercentage = percentage;
+                }
+                return;
             }
-            double dpercent = (((CurrentlyEncodingVideoPosition.TotalSeconds + 1) * 100D) / (CurrentlyEncodingVideoDuration.TotalSeconds + 1));
-            int percentage = Convert.ToInt32(Math.Abs(dpercent));
-            if (percentage > 100) percentage = 100; //cap to 100
 
-            lock (episode)
+            if (ttext.StartsWith("Progress:", StringComparison.OrdinalIgnoreCase))
             {
-                episode.StatusPercentage = percentage;
+                string percentStr = ttext.Substring("Progress: ".Length).TrimEnd('%');
+                if (int.TryParse(percentStr, out int percentage))
+                {
+                    if (percentage > 100) percentage = 100;
+                    lock (episode)
+                    {
+                        episode.StatusPercentage = percentage;
+                        episode.StatusDescription = $"Optimizing MKV ({percentage}%)";
+                    }
+                }
             }
-
+            else if (ttext.StartsWith("Error:", StringComparison.OrdinalIgnoreCase))
+            {
+                Global.TaskAdmin.Logger.EX_Log("mkvmerge error: " + ttext, "EncoderDataRecievedEventHandlerDelegate");
+            }
         }
 
         public static Tuple<TimeSpan, decimal> GetCurrentTimeAndSpeed(string line)
