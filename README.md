@@ -22,6 +22,7 @@ AniDownloader is a terminal-based application for automatically managing anime s
 
 - **.NET 6**: AniDownloader requires .NET 6, which can be installed from the official [Microsoft .NET website](https://dotnet.microsoft.com/download/dotnet/6.0).
 - **FFmpeg**: Ensure FFmpeg is installed on your system for transcoding functionality. Installation instructions can be found at [FFmpeg.org](https://ffmpeg.org/).
+- **mkvmerge**: If you use MKV as a container. Used to optimize MKV files for quick seeking/streaming. Check [The MKVToolNix website](https://mkvtoolnix.org/) for more info about this tool.
 
 ## Installation
 
