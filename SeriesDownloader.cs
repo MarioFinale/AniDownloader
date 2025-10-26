@@ -493,7 +493,7 @@ namespace AniDownloaderTerminal
                     lock (episode)
                     {
                         episode.StatusPercentage = percentage;
-                        episode.StatusDescription = $"Encoding ({percentage}%)";
+                        episode.StatusDescription = $"Encoding";
                     }
                 }
                 else if (currentFrame > 0 && CurrentlyEncodingVideoTotalFrames > 0) // Frame-based fallback if time is N/A
@@ -504,7 +504,7 @@ namespace AniDownloaderTerminal
                     lock (episode)
                     {
                         episode.StatusPercentage = percentage;
-                        episode.StatusDescription = $"Encoding ({percentage}%)";
+                        episode.StatusDescription = $"Encoding";
                     }
                 }
                 return;
