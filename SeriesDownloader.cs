@@ -12,10 +12,13 @@ namespace AniDownloaderTerminal
     public class SeriesDownloader
     {
         public Dictionary<string, EpisodeToDownload> Episodes = new();
-        private readonly ClientEngine engine;    
+        private readonly ClientEngine engine;
         private bool CurrentlyEncodingVideoDurationFound = false;
         private TimeSpan CurrentlyEncodingVideoDuration = new();
         private TimeSpan CurrentlyEncodingVideoPosition = new();
+        private bool CurrentlyEncodingFrameCountFound = false;
+        private bool CurrentlyEncodingVideoStreamFound = false;
+        private ulong CurrentlyEncodingVideoTotalFrames = 0;
 
         public SeriesDownloader()
         {
@@ -50,7 +53,7 @@ namespace AniDownloaderTerminal
             public string DownloadPath { get; }
             public TorrentManager? TorrentManager { get; set; }
             public int Number { get; }
-            public int StatusPercentage { get; set; }
+            public Double StatusPercentage { get; set; }
             public string StatusDescription { get; set; }
 
             private DateTime _stateTime;
@@ -136,7 +139,7 @@ namespace AniDownloaderTerminal
             }
 
         }
-       
+
 
         public void AddTorrentToDictionary(string downloadurl, string downloadPath, string episodeName, int episodeNumber)
         {
@@ -150,7 +153,7 @@ namespace AniDownloaderTerminal
                         Global.TaskAdmin.Logger.Log("Duplicate torrent URL detected for '" + episode.Name + "' Skipping...", "AddTorrentToDictionary");
                         return;
                     }
-                    
+
                 }
                 Episodes.Add(episode.Name, episode);
             }
@@ -211,10 +214,11 @@ namespace AniDownloaderTerminal
 
         public TorrentManager? GetEngineTorrentManagerByPath(string metadataPath, string saveDirectory)
         {
-            foreach (TorrentManager torrentManager in engine.Torrents) {
+            foreach (TorrentManager torrentManager in engine.Torrents)
+            {
                 string dir = torrentManager.SavePath;
                 string met = torrentManager.MetadataPath;
-                if (metadataPath.Equals(met) && saveDirectory.Equals(dir)) return torrentManager;            
+                if (metadataPath.Equals(met) && saveDirectory.Equals(dir)) return torrentManager;
             }
             return null;
 
@@ -377,6 +381,8 @@ namespace AniDownloaderTerminal
                 CurrentlyEncodingVideoDurationFound = false;
                 CurrentlyEncodingVideoDuration = new TimeSpan(0);
                 CurrentlyEncodingVideoPosition = new TimeSpan(0);
+                CurrentlyEncodingFrameCountFound = false;
+                CurrentlyEncodingVideoTotalFrames = 0;
                 withBlock.Start();
                 withBlock.BeginOutputReadLine();
                 withBlock.BeginErrorReadLine();
@@ -399,8 +405,10 @@ namespace AniDownloaderTerminal
                 }
             }
             CurrentlyEncodingVideoDurationFound = false;
+            CurrentlyEncodingFrameCountFound = false;
             CurrentlyEncodingVideoDuration = TimeSpan.Zero;
             CurrentlyEncodingVideoPosition = TimeSpan.Zero;
+            CurrentlyEncodingVideoTotalFrames = 0;
 
             if (!extensionToUse.TrimStart('.').ToLowerInvariant().Equals("mkv")) return true;
 
@@ -471,17 +479,33 @@ namespace AniDownloaderTerminal
                     if (CurrentlyEncodingVideoDuration.Ticks != 0) CurrentlyEncodingVideoDurationFound = true;
                 }
             }
+
             if (ttext.Contains("frame=", StringComparison.OrdinalIgnoreCase))
             {
                 Tuple<TimeSpan, decimal> durationAndSpeed = GetCurrentTimeAndSpeed(ttext);
-                if (durationAndSpeed.Item1.Ticks == 0 || durationAndSpeed.Item2 == 0M) return;
-                CurrentlyEncodingVideoPosition = durationAndSpeed.Item1;
-                double dpercent = ((CurrentlyEncodingVideoPosition.TotalSeconds + 1) * 100D) / (CurrentlyEncodingVideoDuration.TotalSeconds + 1);
-                int percentage = Convert.ToInt32(Math.Abs(dpercent));
-                if (percentage > 100) percentage = 100;
-                lock (episode)
+                ulong currentFrame = GetCurrentFrameFromLine(ttext);
+                if (durationAndSpeed.Item1.Ticks != 0 && durationAndSpeed.Item2 != 0M) // Time-based progress (primary)
                 {
-                    episode.StatusPercentage = percentage;
+                    CurrentlyEncodingVideoPosition = durationAndSpeed.Item1;
+                    double dpercent = ((CurrentlyEncodingVideoPosition.TotalSeconds + 1) * 100D) / (CurrentlyEncodingVideoDuration.TotalSeconds + 1);
+                    double percentage = Math.Truncate(dpercent * 100) / 100;
+                    if (percentage > 100) percentage = 100;
+                    lock (episode)
+                    {
+                        episode.StatusPercentage = percentage;
+                        episode.StatusDescription = $"Encoding ({percentage}%)";
+                    }
+                }
+                else if (currentFrame > 0 && CurrentlyEncodingVideoTotalFrames > 0) // Frame-based fallback if time is N/A
+                {
+                    double dpercent = ((currentFrame + 1) * 100D) / (CurrentlyEncodingVideoTotalFrames + 1);
+                    double percentage = Math.Truncate(dpercent * 100) / 100;
+                    if (percentage > 100) percentage = 100;
+                    lock (episode)
+                    {
+                        episode.StatusPercentage = percentage;
+                        episode.StatusDescription = $"Encoding ({percentage}%)";
+                    }
                 }
                 return;
             }
@@ -489,13 +513,13 @@ namespace AniDownloaderTerminal
             if (ttext.StartsWith("Progress:", StringComparison.OrdinalIgnoreCase))
             {
                 string percentStr = ttext.Substring("Progress: ".Length).TrimEnd('%');
-                if (int.TryParse(percentStr, out int percentage))
+                if (double.TryParse(percentStr, out double percentage))
                 {
                     if (percentage > 100) percentage = 100;
                     lock (episode)
                     {
                         episode.StatusPercentage = percentage;
-                        episode.StatusDescription = $"Optimizing MKV ({percentage}%)";
+                        episode.StatusDescription = $"Optimizing MKV"; //Percentage is shown in the web ui table and console app table.
                     }
                 }
             }
@@ -503,6 +527,40 @@ namespace AniDownloaderTerminal
             {
                 Global.TaskAdmin.Logger.EX_Log("mkvmerge error: " + ttext, "EncoderDataRecievedEventHandlerDelegate");
             }
+
+            if (Regex.IsMatch(ttext, "Stream #0:0:(\\w{1,20})* Video:"))
+            {
+                CurrentlyEncodingVideoStreamFound = true;
+            }
+            if (CurrentlyEncodingVideoStreamFound && !CurrentlyEncodingFrameCountFound)
+            {
+                if (ttext.Contains("NUMBER_OF_FRAMES"))
+                {
+                    CurrentlyEncodingVideoTotalFrames = GetNumberOfFramesFromLine(ttext);
+                    CurrentlyEncodingFrameCountFound = true;
+                }
+            }
+        }
+
+        private static ulong GetCurrentFrameFromLine(string line)
+        {
+            Match match = Regex.Match(line, "frame=\\s*(\\d+)");
+            if (match.Success && ulong.TryParse(match.Groups[1].Value, out ulong frame))
+            {
+                return frame;            
+            }
+            return 0;
+        }
+
+        private static ulong GetNumberOfFramesFromLine(string line)
+        {
+            ulong frames = 0;
+            string[] parts = line.Split(' ');
+            if (ulong.TryParse(parts[^1].Trim(), out frames))
+            {
+                return frames;
+            }
+            return 0;
         }
 
         public static Tuple<TimeSpan, decimal> GetCurrentTimeAndSpeed(string line)
