@@ -1,5 +1,7 @@
 ﻿using DataTablePrettyPrinter;
+using System.Collections.Concurrent;
 using System.Data;
+using System.Text;
 using System.Text.RegularExpressions;
 using static AniDownloaderTerminal.SeriesDownloader.EpisodeToDownload;
 
@@ -74,13 +76,6 @@ namespace AniDownloaderTerminal
 
             Global.TaskAdmin.NewTask("UpdateSeriesDataTable", "Downloader", UpdateSeriesDataTableTask, 200, true);
 
-            bool SearchForUncompletedEpisodesTask()
-            {
-                SearchForUncompletedEpisodes();
-                return true;
-            };
-
-            Global.TaskAdmin.NewTask("SearchForUncompletedEpisodes", "Downloader", SearchForUncompletedEpisodesTask, 60000, true);
 
             bool PrintUpdateTableTask()
             {
@@ -89,12 +84,12 @@ namespace AniDownloaderTerminal
             };
             Global.TaskAdmin.NewTask("PrintUpdateTable", "Downloader", PrintUpdateTableTask, 100, true);
 
-            bool SearchForNeedConvertSeriesTask()
+            bool SearchForUncompletedAndNeedConvertSeriesTask()
             {
-                SearchForNeedConvertSeries();
+                SearchForUncompletedAndNeedConvertSeries();
                 return true;
             }
-            Global.TaskAdmin.NewTask("SearchForNeedConvertSeriesTask", "Downloader", SearchForNeedConvertSeriesTask, 60000, true);
+            Global.TaskAdmin.NewTask("SearchForNeedConvertSeriesTask", "Downloader", SearchForUncompletedAndNeedConvertSeriesTask, 300000, true);
 
             await UpdateSeries();
         }
@@ -156,9 +151,15 @@ namespace AniDownloaderTerminal
             }
         }
 
-        public void SearchForUncompletedEpisodes()
+        /// <summary>
+        /// Searches for uncompleted episodes and series that need conversion by collecting series information from the global series table and search paths,
+        /// then processes each series for markers requiring conversion and uncompleted temporary folders.
+        /// This method replaces the original SearchForUncompletedEpisodes and SearchForNeedConvertSeries methods.
+        /// </summary>
+        public void SearchForUncompletedAndNeedConvertSeries()
         {
-            List<Tuple<String, String>> seriesRows = [];
+            // Use HashSet to avoid duplicate series if paths overlap between table and search subdirs
+            HashSet<(string name, string path)> seriesRows = [];
             lock (Global.SeriesTable)
             {
                 foreach (DataRow row in Global.SeriesTable.Rows)
@@ -169,11 +170,9 @@ namespace AniDownloaderTerminal
                     {
                         continue;
                     }
-                    Tuple<String, String> tup = Tuple.Create(seriesName, seriesPath);
-                    seriesRows.Add(tup);
+                    seriesRows.Add((seriesName, seriesPath));
                 }
             }
-
             foreach (String path in Settings.SearchPaths)
             {
                 foreach (String subDir in Directory.EnumerateDirectories(path))
@@ -183,161 +182,162 @@ namespace AniDownloaderTerminal
                     string seriesName = new DirectoryInfo(subDir).Name;
                     string? seriesPath = Path.GetFullPath(subDir);
                     if (seriesName == null || seriesPath == null) continue;
-                    Tuple<String, String> tup = Tuple.Create(seriesName, seriesPath);
-                    seriesRows.Add(tup);
-                }              
+                    seriesRows.Add((seriesName, seriesPath));
+                }
             }
-
-            foreach (Tuple<String, String> row in seriesRows)
+            foreach ((string name, string path) row in seriesRows)
             {
-                string seriesName = row.Item1;
-                string seriesPath = row.Item2;
-
-                Global.CurrentOpsQueue.Enqueue($"Searching unconverted files for {seriesName}");
-
+                string seriesName = row.name;
+                string seriesPath = row.path;
+                Global.CurrentOpsQueue.Enqueue($"Searching unconverted files and marked series for {seriesName}");
                 if (!Directory.Exists(seriesPath))
                 {
                     continue;
                 }
-
-                foreach (string tempDirPath in Directory.GetDirectories(seriesPath, "*.temp"))
-                {
-                    string episodeName = Path.GetFileNameWithoutExtension(tempDirPath).Trim();
-
-                    if (!int.TryParse(TempFolderEpisodeNumberRegex().Match(episodeName).Value, out int episodeNumber)) continue;
-                    if (CurrentSeriesDownloader.Episodes.ContainsKey(episodeName)) continue;
-
-                    // Check for episode states
-                    if (File.Exists(Path.Combine(tempDirPath, "state.DownloadedSeeding")) ||
-                        File.Exists(Path.Combine(tempDirPath, "state.ReEncoding")))
-                    {
-                        AddEpisode(episodeName, seriesPath, episodeNumber, State.DownloadedFound, "Downloaded-found");
-                    }
-                    else if (File.Exists(Path.Combine(tempDirPath, "state.EncodedSeeding")) ||
-                             File.Exists(Path.Combine(tempDirPath, "state.EncodedFound")))
-                    {
-                        AddEpisode(episodeName, seriesPath, episodeNumber, State.EncodedFound, "Encoded-found");
-                    }
-                }
-            }
-
-            Global.CurrentOpsQueue.Enqueue("Unconverted files search done.");
-        }
-
-        private void SearchForNeedConvertSeries()
-        {
-            var validExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".mkv", ".mp4" };  // Align with Series.cs
-
-            foreach (string rootPath in Settings.SearchPaths)
-            {
-                if (string.IsNullOrWhiteSpace(rootPath) || !Directory.Exists(rootPath)) continue;
-
-                foreach (string subDir in Directory.EnumerateDirectories(rootPath, "*", SearchOption.TopDirectoryOnly))  // Lazy, non-recursive
-                {
-                    Global.CurrentOpsQueue.Enqueue($"Searching unconverted files in {subDir}");
-                    string markerPath = Path.Combine(subDir, Settings.NeedsConvertFileName);
-                    if (!File.Exists(markerPath)) continue;
-
-                    string seriesName = new DirectoryInfo(subDir).Name;
-                    if (String.IsNullOrWhiteSpace(seriesName))
-                    {
-                        Global.TaskAdmin.Logger.Log($"Skipped '{subDir}'. DirectoryInfo for the path returned null or an empty string.", "SearchForNeedConvertSeries");
-                        continue;
-                    }
-
-                    try
-                    {
-                        string probeFile = Path.Combine(subDir, "probe");
-                        bool probeOk = true;
-                        if (File.Exists(probeFile))
-                        {
-                           probeOk = probeOk && DeleteFileWithRetries(probeFile, 3);
-                        }
-                        File.Create(probeFile).Close();
-                        probeOk = probeOk && DeleteFileWithRetries(probeFile, 3);
-                        if (!probeOk) throw new Exception("DeleteFileWithRetries failed.");
-                    }
-                    catch (Exception ex)
-                    {
-                        Global.TaskAdmin.Logger.EX_Log($"Probing for '{subDir}' failed. Skipping Subdirectory. Exception: {ex.Message}.", "SearchForNeedConvertSeries");
-                        continue;
-                    }
-
-                    try
-                    {
-                        // Get all files once
-                        string[] videoFiles = [.. Directory.GetFiles(subDir, "*.mkv"), .. Directory.GetFiles(subDir, "*.mp4")];
-                        if (videoFiles.Length == 0) continue;  // No files; skip (but could delete marker if empty dir desired)
-
-
-                        int queuedCount = 0;
-                        foreach (string file in videoFiles)
-                        {
-
-                            string extension = Path.GetExtension(file).ToLowerInvariant();
-                            if (!validExtensions.Contains(extension)) continue;
-
-                            string episodeName = Path.GetFileNameWithoutExtension(file).Trim();
-
-                            int? episodeNumber =  OnlineEpisodeElement.GetEpNumberFromString(episodeName);
-
-                            if (episodeNumber == null) {
-                                Global.TaskAdmin.Logger.Log($"Skipped '{file}'. No episode number found.", "SearchForNeedConvertSeries");
-                                continue;
-                            }
-                            string epNumberString = String.Format("{0:00}", episodeNumber);
-                            if (videoFiles.Length > 99)
-                            {
-                                epNumberString = String.Format("{0:000}", episodeNumber);
-                            }
-                            string destEpisodeExtension = Path.GetExtension(file).ToLowerInvariant();
-                            string destEpisodeName = seriesName + " " + epNumberString;                            
-                            string tempFolder = Path.Combine(subDir, destEpisodeName)  + ".temp"; //Temp folder is per-episode, not per series. When episode processing is complete the folder is deleted.
-                            string destEpisodePath = Path.Combine(tempFolder, destEpisodeName + destEpisodeExtension);
-                            try
-                            {
-                                if (Directory.Exists(tempFolder))
-                                {
-                                    Directory.Delete(tempFolder, true);
-                                    Global.TaskAdmin.Logger.Log($"Pre-existent temporary folder '{tempFolder}' was deleted.", "SearchForNeedConvertSeries");
-                                }
-                                Directory.CreateDirectory(tempFolder);
-                            }
-                            catch (Exception ex)
-                            {
-                                Global.TaskAdmin.Logger.EX_Log($"Failed to delete temp dir '{tempFolder}'. Exception: {ex.Message}", "SearchForNeedConvertSeries");
-                                continue;
-                            }                            
-
-
-                            if (!MoveFileWithRetries(file, destEpisodePath, 3))
-                            {
-                                Global.TaskAdmin.Logger.Log($"Skipped '{file}'. Failed to move to temp folder.", "SearchForNeedConvertSeries");
-                                continue;
-                            }
-
-                            AddEpisode(destEpisodeName, subDir, (int) episodeNumber, State.DownloadedFound, "Downloaded-Found"); //DownloadedFound = DownloadedSeeding. Added recently.
-                            queuedCount++;
-                        }
-
-                        if (queuedCount > 0)
-                        {
-                            Global.TaskAdmin.Logger.Log($"Queued {queuedCount} files of {videoFiles.Length} in '{subDir}' for Series '{seriesName}'. Missing files may not satisfy requirements, check filenames and Logs.", "SearchForNeedConvertSeries");                                                      
-                        }
-                        if (!DeleteFileWithRetries(markerPath, 3))
-                        {
-                            Global.TaskAdmin.Logger.EX_Log($"Failed to delete marker '{markerPath}'", "SearchForNeedConvertSeries");
-                            continue;
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Global.TaskAdmin.Logger.EX_Log($"Error processing '{subDir}': {ex.Message}", "SearchForNeedConvertSeries");
-                    }
-
-                }
+                SearchAndProcessDirectoryMarker(seriesName, seriesPath);
+                SearchAndProcessUncompleted(seriesPath);
             }
             UpdateSeriesDataTable();
+            Global.CurrentOpsQueue.Enqueue("Search for unconverted files and marked series done.");
+        }
+
+        /// <summary>
+        /// Processes a series directory if it contains a marker file indicating the need for conversion.
+        /// This includes probing the directory for writability, moving valid video files into per-episode temporary folders,
+        /// adding them as downloaded episodes, and deleting the marker file upon success.
+        /// </summary>
+        /// <param name="seriesName">The name of the series.</param>
+        /// <param name="seriesPath">The full path to the series directory.</param>
+        public void SearchAndProcessDirectoryMarker(string seriesName, string seriesPath)
+        {
+            string markerPath = Path.Combine(seriesPath, Settings.NeedsConvertFileName);
+            if (!File.Exists(markerPath)) return;
+            if (String.IsNullOrWhiteSpace(seriesName))
+            {
+                Global.TaskAdmin.Logger.Log($"Skipped '{seriesPath}'. DirectoryInfo for the path returned null or an empty string.", "SearchAndProcessDirectoryMarker");
+                return;
+            }
+            try
+            {
+                // Probe the directory by creating and deleting a test file to ensure writability
+                string probeFile = Path.Combine(seriesPath, "probe");
+                bool probeOk = true;
+                if (File.Exists(probeFile))
+                {
+                    probeOk &= DeleteFileWithRetries(probeFile, 3);
+                }
+                File.Create(probeFile).Close();
+                probeOk = probeOk && DeleteFileWithRetries(probeFile, 3);
+                if (!probeOk) throw new Exception("DeleteFileWithRetries failed.");
+            }
+            catch (Exception ex)
+            {
+                Global.TaskAdmin.Logger.EX_Log($"Probing for '{seriesPath}' failed. Skipping Subdirectory. Exception: {ex.Message}.", "SearchAndProcessDirectoryMarker");
+                return;
+            }
+            try
+            {
+                // Get all files once
+                string[] videoFiles = [.. Settings.ValidExtensions.SelectMany(extension => Directory.EnumerateFiles(seriesPath, "*" + extension))]; //Settings.ValidExtensions <- lowercase hashset of extensions with dot.
+                if (videoFiles.Length == 0)
+                {
+                    Global.TaskAdmin.Logger.Log($"Deleting marker '{markerPath}' for empty series '{seriesName}' in path '{seriesPath}'. No valid video files found!", "SearchAndProcessDirectoryMarker");
+                    if (!DeleteFileWithRetries(markerPath, 3))
+                    {
+                        Global.TaskAdmin.Logger.EX_Log($"Failed to delete marker '{markerPath}'", "SearchAndProcessDirectoryMarker");
+                    }
+                    return;
+                }
+                int queuedCount = 0;
+                foreach (string file in videoFiles)
+                {
+                    string episodeName = Path.GetFileNameWithoutExtension(file).Trim();
+                    int? episodeNumber = OnlineEpisodeElement.GetEpNumberFromString(episodeName); //Method catches exceptions, always returns a number of null.
+                    if (episodeNumber == null)
+                    {
+                        Global.TaskAdmin.Logger.Log($"Skipped '{file}'. No episode number found.", "SearchAndProcessDirectoryMarker");
+                        continue;
+                    }
+                    // Format episode number as 00 or 000 based on total video files to ensure consistent naming (e.g., for sorting)
+                    string epNumberString = String.Format("{0:00}", episodeNumber);
+                    if (videoFiles.Length > 99)
+                    {
+                        epNumberString = String.Format("{0:000}", episodeNumber);
+                    }
+                    string destEpisodeExtension = Path.GetExtension(file).ToLowerInvariant();
+                    string destEpisodeName = seriesName + " " + epNumberString;
+                    string tempFolder = Path.Combine(seriesPath, destEpisodeName) + ".temp"; //Temp folder is per-episode, not per series. When episode processing is complete the folder is deleted.
+                    string destEpisodePath = Path.Combine(tempFolder, destEpisodeName + destEpisodeExtension);
+                    try
+                    {
+                        if (Directory.Exists(tempFolder))
+                        {
+                            Directory.Delete(tempFolder, true);
+                            Global.TaskAdmin.Logger.Log($"Pre-existent temporary folder '{tempFolder}' was deleted.", "SearchAndProcessDirectoryMarker");
+                        }
+                        Directory.CreateDirectory(tempFolder);
+                    }
+                    catch (Exception ex)
+                    {
+                        Global.TaskAdmin.Logger.EX_Log($"Failed to delete temp dir '{tempFolder}'. Exception: {ex.Message}", "SearchAndProcessDirectoryMarker");
+                        continue;
+                    }
+                    if (!MoveFileWithRetries(file, destEpisodePath, 3))
+                    {
+                        Global.TaskAdmin.Logger.Log($"Skipped '{file}'. Failed to move to temp folder.", "SearchAndProcessDirectoryMarker");
+                        continue;
+                    }
+                    AddEpisode(destEpisodeName, seriesPath, (int)episodeNumber, State.DownloadedFound, "Downloaded-Found"); //DownloadedFound = DownloadedSeeding. Added recently.
+                    queuedCount++;
+                }
+                if (queuedCount > 0)
+                {
+                    Global.TaskAdmin.Logger.Log($"Queued {queuedCount} files of {videoFiles.Length} in '{seriesPath}' for Series '{seriesName}'.", "SearchAndProcessDirectoryMarker");
+                    if (queuedCount != videoFiles.Length)
+                    {
+                        Global.TaskAdmin.Logger.Log($"Unprocessed files in '{seriesPath}' may not satisfy requirements, check filenames, extensions and Logs.", "SearchAndProcessDirectoryMarker");
+                        
+                    }
+                }
+                if (!DeleteFileWithRetries(markerPath, 3))
+                {
+                    Global.TaskAdmin.Logger.EX_Log($"Failed to delete marker '{markerPath}'", "SearchAndProcessDirectoryMarker");
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                Global.TaskAdmin.Logger.EX_Log($"Error processing '{seriesPath}': {ex.Message}", "SearchAndProcessDirectoryMarker");
+            }
+        }
+
+        /// <summary>
+        /// Scans a series directory for temporary (.temp) episode folders and adds uncompleted episodes to the downloader
+        /// based on their state files, skipping those already in the episodes dictionary.
+        /// </summary>
+        /// <param name="seriesPath">The full path to the series directory.</param>
+        public void SearchAndProcessUncompleted(string seriesPath)
+        {
+            foreach (string tempDirPath in Directory.GetDirectories(seriesPath, "*.temp"))
+            {
+                string episodeName = Path.GetFileNameWithoutExtension(tempDirPath).Trim();
+                Match tempFolderMatch = TempFolderEpisodeNumberRegex().Match(episodeName);
+                if (!tempFolderMatch.Success) continue;
+                if (!int.TryParse(tempFolderMatch.Value, out int episodeNumber)) continue; //Value can not be null because we guarded against match success.
+                // Skip if episode is already being tracked in the current downloader
+                if (CurrentSeriesDownloader.Episodes.ContainsKey(episodeName)) continue;
+                // Check for episode states to determine if it's downloaded or encoded
+                if (File.Exists(Path.Combine(tempDirPath, "state.DownloadedSeeding")) ||
+                    File.Exists(Path.Combine(tempDirPath, "state.ReEncoding")))
+                {
+                    AddEpisode(episodeName, seriesPath, episodeNumber, State.DownloadedFound, "Downloaded-found");
+                }
+                else if (File.Exists(Path.Combine(tempDirPath, "state.EncodedSeeding")) ||
+                         File.Exists(Path.Combine(tempDirPath, "state.EncodedFound")))
+                {
+                    AddEpisode(episodeName, seriesPath, episodeNumber, State.EncodedFound, "Encoded-found");
+                }
+            }
         }
 
 
@@ -570,9 +570,29 @@ namespace AniDownloaderTerminal
 
         private static string GetCurrentOpsString()
         {
-            return Global.CurrentOpsQueue.Count < 2
-                ? Global.CurrentOpsQueue.Peek()
-                : Global.CurrentOpsQueue.Dequeue();
+            var queue = Global.CurrentOpsQueue;
+            if (queue.Count > 5)
+            {
+                while (queue.Count > 1)
+                {
+                    queue.TryDequeue(out _);
+                }
+                queue.TryPeek(out var result);
+                return result ?? String.Empty;
+            }
+            else
+            {
+                if (queue.Count < 2)
+                {
+                    queue.TryPeek(out var result);
+                    return result ?? String.Empty;
+                }
+                else
+                {
+                    queue.TryDequeue(out var result);
+                    return result ?? String.Empty;
+                }
+            }
         }
 
         private bool ShouldUpdateConsole(string consoleText)

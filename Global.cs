@@ -1,4 +1,5 @@
-﻿using System.Data;
+﻿using System.Collections.Concurrent;
+using System.Data;
 using System.Globalization;
 using System.Text.RegularExpressions;
 
@@ -7,7 +8,7 @@ namespace AniDownloaderTerminal
     public static class Global
     {
         public static readonly TaskAdmin.Utility.TaskAdmin TaskAdmin = new();
-        public static readonly Queue<string> CurrentOpsQueue = new();
+        public static readonly ConcurrentQueue<string> CurrentOpsQueue = new();
 
         public readonly static string Exepath = AppDomain.CurrentDomain.BaseDirectory;
         public readonly static string SeriesTableFilePath = Path.Combine(Exepath,"SeriesData.xml");

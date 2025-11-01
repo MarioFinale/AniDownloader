@@ -68,6 +68,9 @@
         public static string Password { get => _Password; set => _Password = value; }
         static string _Password = "changeme";
 
+        public static HashSet<string> ValidExtensions { get => _ValidExtensions; set => _ValidExtensions = value; }
+        static HashSet<string> _ValidExtensions = new(StringComparer.OrdinalIgnoreCase) { ".mkv", ".mp4" };
+
 
 
 

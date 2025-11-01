@@ -289,7 +289,11 @@ namespace AniDownloaderTerminal
                 {
                     try
                     {
-                        responseData = Global.CurrentOpsQueue.Peek();
+                        Global.CurrentOpsQueue.TryPeek(out var peek);
+                        if (peek != null)
+                        {
+                            responseData = peek;
+                        }                        
                     }
                     catch (Exception ex)
                     {
