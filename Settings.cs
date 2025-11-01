@@ -1,11 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Numerics;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace AniDownloaderTerminal
+﻿namespace AniDownloaderTerminal
 {
     public class Settings
     {
@@ -51,7 +44,13 @@ namespace AniDownloaderTerminal
         static string _ListeningIP = "127.0.0.1";
 
         public static string DefaultPath { get => _DefaultPath; set => _DefaultPath = value; }      
-        static string _DefaultPath = "/";        
+        static string _DefaultPath = "/";
+
+        public static string NeedsConvertFileName { get => _NeedsConvertFileName; set => _NeedsConvertFileName = value; }
+        static string _NeedsConvertFileName = ".needsConvert";
+
+        public static string[] SearchPaths { get => _SearchPaths; set => _SearchPaths = value; }
+        static string[] _SearchPaths = ["/"];
 
         public static string UncensoredEpisodeRegex { get => _UncensoredEpisodeRegex; set => _UncensoredEpisodeRegex = value; }
         static string _UncensoredEpisodeRegex = "[Uu]ncensored|[Ss]in *[Cc]ensura";
@@ -70,9 +69,11 @@ namespace AniDownloaderTerminal
         static string _Password = "changeme";
 
 
+
+
         private bool InvalidSettings = false;
 
-        private readonly Dictionary<string, DateTime> LastWriteTimes = new();
+        private readonly Dictionary<string, DateTime> LastWriteTimes = [];
 
         public void Init() {
             LoadAndValidateSettingsFile();
@@ -113,6 +114,8 @@ namespace AniDownloaderTerminal
                 TryUpdateSetting(settingValues, "EnableWebServer", ref _EnableWebServer);
                 TryUpdateSetting(settingValues, "ListeningIP", ref _ListeningIP);
                 TryUpdateSetting(settingValues, "DefaultPath", ref _DefaultPath);
+                TryUpdateSetting(settingValues, "SearchPaths", ref _SearchPaths);
+                TryUpdateSetting(settingValues, "_NeedsConvertFileName", ref _NeedsConvertFileName);
                 TryUpdateSetting(settingValues, "UncensoredEpisodeRegex", ref _UncensoredEpisodeRegex);
                 TryUpdateSetting(settingValues, "CustomLanguageNameRegex", ref _CustomLanguageNameRegex);
                 TryUpdateSetting(settingValues, "CustomLanguageDescriptionRegex", ref _CustomLanguageDescriptionRegex);
@@ -125,7 +128,7 @@ namespace AniDownloaderTerminal
                 if (InvalidSettings)
                 {
                     InvalidSettings = false;
-                    List<string> newSettings = new();
+                    List<string> newSettings = [];
                     foreach(KeyValuePair<string,string> setting in settingValues)
                     {
                         newSettings.Add($"{setting.Key} = {setting.Value}");
@@ -143,22 +146,86 @@ namespace AniDownloaderTerminal
 
         private void TryUpdateSetting<T>(Dictionary<string, string> settingValues, string key, ref T variable)
         {
-            if (settingValues.ContainsKey(key))
+            if (settingValues.TryGetValue(key, out string? value))
             {
-                string value = settingValues[key];
                 try
                 {
-                    variable = (T)Convert.ChangeType(value, typeof(T));
+                    if (typeof(T) == typeof(string[]))
+                    {
+                        // Parse as semicolon-separated (safer for paths with commas); replace embedded ';' to prevent mis-splits.
+                        string[] arrayValue = [.. value.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                                              .Select(p =>
+                                              {
+                                                  if (p.Contains(';'))
+                                                  {
+                                                      Global.TaskAdmin.Logger.Log($"Warning: Path for '{key}' '{p}' contains semicolon - replacing with '_'.", "LoadSettings");
+                                                      return p.Replace(";", "_");
+                                                  }
+                                                  return p;
+                                              })
+                                              .Where(p => !string.IsNullOrWhiteSpace(p))];
+
+                        // Log if empty after filtering
+                        if (arrayValue.Length == 0)
+                        {
+                            Global.TaskAdmin.Logger.Log($"Warning: All paths for '{key}' were empty or invalid after filtering.", "LoadSettings");
+                        }
+
+                        foreach (var path in arrayValue)
+                        {
+                            if (!Directory.Exists(path))
+                            {
+                                Global.TaskAdmin.Logger.Log($"Warning: Search path for '{key}' '{path}' does not exist. Entry will be added but consider creating the directory or removing the entry.", "LoadSettings");
+                            }
+                        }
+                        variable = (T)(object)arrayValue;
+                    }
+                    else
+                    {
+                        variable = (T)Convert.ChangeType(value, typeof(T));
+                    }
                 }
-                catch
+                catch (Exception ex)
                 {
-                    settingValues[key] = (variable?.ToString()) ?? string.Empty;
+                    Global.TaskAdmin.Logger.EX_Log($"Failed to parse {key}: {ex.Message}. Using default.", "LoadSettings");
+                    if (typeof(T) == typeof(string[]))
+                    {
+                        if (variable != null)
+                        {
+                            settingValues[key] = string.Join(";", (string[])(object)variable);
+                        }
+                        else
+                        {
+                            Global.TaskAdmin.Logger.EX_Log($"Failed to use default in {key}. Setting will be set to empty.", "LoadSettings");
+                            Global.TaskAdmin.Logger.EX_Log($"This should not be null. If this is a fork, nag the Authors.", "LoadSettings");
+                            settingValues[key] = string.Empty; // For safety, but should not happen because defaults are not null.
+                        }
+                    }
+                    else
+                    {
+                        settingValues[key] = (variable?.ToString()) ?? string.Empty;
+                    }
                     InvalidSettings = true;
                 }
             }
             else
             {
-                settingValues.Add(key, (variable?.ToString()) ?? string.Empty);
+                if (typeof(T) == typeof(string[]))
+                {
+                    if (variable != null)
+                    {
+                        settingValues.Add(key, string.Join(";", (string[])(object)variable));
+                    }
+                    else
+                    {
+                        Global.TaskAdmin.Logger.EX_Log($"Failed to set value in {key}. Setting will be set to empty.", "LoadSettings");
+                        settingValues.Add(key, string.Empty); // For safety, but again, should not happen because defaults are not null.
+                    }
+                }
+                else
+                {
+                    settingValues.Add(key, (variable?.ToString()) ?? string.Empty);
+                }
                 InvalidSettings = true;
             }
         }
@@ -172,9 +239,8 @@ namespace AniDownloaderTerminal
             }
 
             DateTime currentWriteTime = File.GetLastWriteTime(filePath);
-            if (LastWriteTimes.ContainsKey(filePath))
+            if (LastWriteTimes.TryGetValue(filePath, out DateTime lastCheckWriteTime))
             {
-                DateTime lastCheckWriteTime = LastWriteTimes[filePath];
                 bool hasBeenModified = currentWriteTime > lastCheckWriteTime;
 
                 if (hasBeenModified)

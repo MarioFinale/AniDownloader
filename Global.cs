@@ -17,7 +17,10 @@ namespace AniDownloaderTerminal
         public static readonly DataTable CurrentStatusTable = new("Torrent Status");
 
         private static DateTime LastRequestTime;
-        private static readonly HttpClient httpClient = new();
+        private static readonly HttpClient httpClient = new()
+        {
+            Timeout = TimeSpan.FromSeconds(60)
+        };
 
 
         private static async Task DelayAsync()

@@ -1,17 +1,15 @@
-﻿using Mono.Nat.Logging;
-using MonoTorrent;
+﻿using MonoTorrent;
 using MonoTorrent.Client;
 using MonoTorrent.Client.Tracker;
-using System;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using static AniDownloaderTerminal.SeriesDownloader.EpisodeToDownload;
 
 namespace AniDownloaderTerminal
 {
-    public class SeriesDownloader
+    public partial class SeriesDownloader
     {
-        public Dictionary<string, EpisodeToDownload> Episodes = new();
+        public Dictionary<string, EpisodeToDownload> Episodes = [];
         private readonly ClientEngine engine;
         private bool CurrentlyEncodingVideoDurationFound = false;
         private TimeSpan CurrentlyEncodingVideoDuration = new();
@@ -19,6 +17,16 @@ namespace AniDownloaderTerminal
         private bool CurrentlyEncodingFrameCountFound = false;
         private bool CurrentlyEncodingVideoStreamFound = false;
         private ulong CurrentlyEncodingVideoTotalFrames = 0;
+        private static readonly string[] sourceArray = [".mp4", ".mkv"];
+
+        [GeneratedRegex("Stream #0:0:(\\w{1,20})* Video:")]
+        private static partial Regex FFmpegStreamZeroRegex();
+        [GeneratedRegex("frame=\\s*(\\d+)")]
+        private static partial Regex FFmpegFrameRegex();
+        [GeneratedRegex(@"(Duration: )([0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{2})")]
+        private static partial Regex FFmpegDurationRegex();
+        [GeneratedRegex(@"time=(\d{2}:\d{2}:\d{2}\.\d{2}).+?speed=(\d{1,20}\.*\d{1,20})x")]
+        private static partial Regex FFmpegTimeSpeedRegex();
 
         public SeriesDownloader()
         {
@@ -42,48 +50,33 @@ namespace AniDownloaderTerminal
         }
 
 
-        public class EpisodeToDownload
+        /// <summary>
+        /// Class holding episode to download data.
+        /// </summary>
+        /// <param name="URL">Url of the torrent file.</param>
+        /// <param name="epName">Name of the episode without extension</param>
+        /// <param name="episodePath">episodePath is only the folder, not the complete file path, this class calculates the file path in the method getEpisodeFilePathWitoutExtension()</param>
+        /// <param name="number">Number of the episode, unused but exposed</param>
+        public class EpisodeToDownload(string URL, string epName, string episodePath, int number)
         {
-            public string TorrentURL { get; }
-            public string TorrentName { get; }
-            public string Name { get; }
+            public string TorrentURL { get; } = URL;
+            public string TorrentName { get; } = Path.GetFileNameWithoutExtension(URL);
+            public string Name { get; } = epName;
             /// <summary>
             /// Folder where the episode will be stored.
             /// </summary>
-            public string DownloadPath { get; }
+            public string DownloadPath { get; } = episodePath;
             public TorrentManager? TorrentManager { get; set; }
-            public int Number { get; }
+            public int Number { get; } = number;
             public Double StatusPercentage { get; set; }
-            public string StatusDescription { get; set; }
+            public string StatusDescription { get; set; } = "Queued for Download";
 
-            private DateTime _stateTime;
+            private DateTime _stateTime = DateTime.Now;
             public State GetState { get => _episodeState; }
-            private State _episodeState;
+            private State _episodeState = State.NotStarted;
 
             public DateTime StateTime { get { return _stateTime; } }
             public State EpisodeState { get { return _episodeState; } }
-
-            //
-
-            /// <summary>
-            /// Class holding episode to download data.
-            /// </summary>
-            /// <param name="URL">Url of the torrent file.</param>
-            /// <param name="epName">Name of the episode without extension</param>
-            /// <param name="episodePath">episodePath is only the folder, not the complete file path, this class calculates the file path in the method getEpisodeFilePathWitoutExtension()</param>
-            /// <param name="number">Number of the episode, unused but exposed</param>
-            public EpisodeToDownload(string URL, string epName, string episodePath, int number)
-            {
-
-                TorrentURL = URL;
-                Name = epName;
-                DownloadPath = episodePath;
-                Number = number;
-                _stateTime = DateTime.Now;
-                _episodeState = State.NotStarted;
-                TorrentName = Path.GetFileNameWithoutExtension(URL);
-                StatusDescription = "Queued for Download";
-            }
 
             public void SetState(State state)
             {
@@ -104,7 +97,7 @@ namespace AniDownloaderTerminal
 
             public string GetTempDownloadPath()
             {
-                return DownloadPath + "/" + Name + ".temp";
+                return Path.Combine(DownloadPath, Name + ".temp");
             }
 
             public string GetTorrentFilePath()
@@ -135,7 +128,8 @@ namespace AniDownloaderTerminal
                 DownloadedSeeding,
                 ReEncoding,
                 EncodedSeeding,
-                EncodedFound
+                EncodedFound,
+                DownloadedFound = DownloadedSeeding
             }
 
         }
@@ -238,10 +232,12 @@ namespace AniDownloaderTerminal
                     // Regex with word boundary for better accuracy
                     Regex episodeNumberRegex = new($@"\b{episodeNumber}\d{{0,2}}\b", RegexOptions.Compiled);
 
+                    var a = Directory.GetFiles(episode.GetTempDownloadPath(), "*", SearchOption.AllDirectories);
+
                     // Fetch all candidate files
                     var candidateFiles = Directory
                         .GetFiles(episode.GetTempDownloadPath(), "*", SearchOption.AllDirectories)
-                        .Where(file => new[] { ".mp4", ".mkv" }.Contains(Path.GetExtension(file)?.ToLowerInvariant()))
+                        .Where(file => sourceArray.Contains(Path.GetExtension(file)?.ToLowerInvariant()))
                         .ToList();
 
                     // Sort based on regex match and closest number
@@ -250,7 +246,7 @@ namespace AniDownloaderTerminal
                         .ThenBy(file => Math.Abs(GetLastNumber(Path.GetFileNameWithoutExtension(file)) - episodeNumber))
                         .ToList();
 
-                    if (!sortedFiles.Any()) continue;
+                    if (sortedFiles.Count == 0) continue;
 
                     ConvertFile(episode, sortedFiles[0]);
 
@@ -270,7 +266,7 @@ namespace AniDownloaderTerminal
 
         private static int GetLastNumber(string fileName)
         {
-            var parts = fileName.Split(new[] { ' ', '-', '_' }, StringSplitOptions.RemoveEmptyEntries);
+            var parts = fileName.Split([' ', '-', '_'], StringSplitOptions.RemoveEmptyEntries);
             return parts.Reverse().FirstOrDefault(part => int.TryParse(part, out _)) is string numStr && int.TryParse(numStr, out int num) ? num : int.MaxValue;
         }
 
@@ -512,7 +508,7 @@ namespace AniDownloaderTerminal
 
             if (ttext.StartsWith("Progress:", StringComparison.OrdinalIgnoreCase))
             {
-                string percentStr = ttext.Substring("Progress: ".Length).TrimEnd('%');
+                string percentStr = ttext["Progress: ".Length..].TrimEnd('%');
                 if (double.TryParse(percentStr, out double percentage))
                 {
                     if (percentage > 100) percentage = 100;
@@ -528,7 +524,7 @@ namespace AniDownloaderTerminal
                 Global.TaskAdmin.Logger.EX_Log("mkvmerge error: " + ttext, "EncoderDataRecievedEventHandlerDelegate");
             }
 
-            if (Regex.IsMatch(ttext, "Stream #0:0:(\\w{1,20})* Video:"))
+            if (FFmpegStreamZeroRegex().IsMatch(ttext))
             {
                 CurrentlyEncodingVideoStreamFound = true;
             }
@@ -544,7 +540,7 @@ namespace AniDownloaderTerminal
 
         private static ulong GetCurrentFrameFromLine(string line)
         {
-            Match match = Regex.Match(line, "frame=\\s*(\\d+)");
+            Match match = FFmpegFrameRegex().Match(line);
             if (match.Success && ulong.TryParse(match.Groups[1].Value, out ulong frame))
             {
                 return frame;            
@@ -554,9 +550,8 @@ namespace AniDownloaderTerminal
 
         private static ulong GetNumberOfFramesFromLine(string line)
         {
-            ulong frames = 0;
             string[] parts = line.Split(' ');
-            if (ulong.TryParse(parts[^1].Trim(), out frames))
+            if (ulong.TryParse(parts[^1].Trim(), out ulong frames))
             {
                 return frames;
             }
@@ -565,11 +560,11 @@ namespace AniDownloaderTerminal
 
         public static Tuple<TimeSpan, decimal> GetCurrentTimeAndSpeed(string line)
         {
-            Match m = Regex.Match(line, @"time=(\d{2}:\d{2}:\d{2}\.\d{2}).+?speed=(\d{1,20}\.*\d{1,20})x");
+            Match m = FFmpegTimeSpeedRegex().Match(line);
             if (!m.Success)
                 return new Tuple<TimeSpan, decimal>(new TimeSpan(0), 0M);
             string t = m.Groups[1].Value;
-            string[] tim = t.Split(new[] { '.', ':' });
+            string[] tim = t.Split(['.', ':']);
             TimeSpan span = new(0, int.Parse(tim[0]), int.Parse(tim[1]), int.Parse(tim[2]), int.Parse(tim[3]) * 10);
             string s = m.Groups[2].Value;
             decimal spd = decimal.Parse(s);
@@ -578,11 +573,11 @@ namespace AniDownloaderTerminal
 
         public static TimeSpan GetDurationFromStderr(string line)
         {
-            Match m = Regex.Match(line, @"(Duration: )([0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{2})");
+            Match m = FFmpegDurationRegex().Match(line);
             if (m.Success)
             {
                 string t = m.Groups[2].Value;
-                string[] tim = t.Split(new[] { '.', ':' });
+                string[] tim = t.Split(['.', ':']);
                 TimeSpan span = new(0, int.Parse(tim[0]), int.Parse(tim[1]), int.Parse(tim[2]), int.Parse(tim[3]) * 10);
                 return span;
             }
@@ -634,9 +629,5 @@ namespace AniDownloaderTerminal
         {
             Debug.WriteLine($"Episode {episode.Name} Tracker announce: {e.Successful}: {e.Tracker}");
         }
-
-
-
-
     }
 }

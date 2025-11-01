@@ -1,14 +1,12 @@
-﻿using System.Data;
-using System.Reflection.Emit;
+﻿using DataTablePrettyPrinter;
+using System.Data;
 using System.Text.RegularExpressions;
-using DataTablePrettyPrinter;
-
 using static AniDownloaderTerminal.SeriesDownloader.EpisodeToDownload;
 
 
 namespace AniDownloaderTerminal
 {
-    public class Program
+    public partial class Program
     {
         private string CurrentlyScanningSeries = string.Empty;
         private readonly SeriesDownloader CurrentSeriesDownloader = new();
@@ -19,6 +17,9 @@ namespace AniDownloaderTerminal
 
         public static readonly Settings settings = new();
         public static readonly Webserver webserver = new();
+
+        [GeneratedRegex(@"\d{1,3}$")]
+        private static partial Regex TempFolderEpisodeNumberRegex();
 
         public static void Main()
         {
@@ -48,13 +49,13 @@ namespace AniDownloaderTerminal
             Global.TaskAdmin.NewTask("StartDownloads", "Downloader", StartDownloadsTask, 1000, true);
 
 
-            bool StartConvertionsTask()
+            bool StartConversionsTask()
             {
                 CurrentSeriesDownloader.StartConversions();
                 return true;
             }
 
-            Global.TaskAdmin.NewTask("StartConvertions", "Downloader", StartConvertionsTask, 2000, true);
+            Global.TaskAdmin.NewTask("StartConvertions", "Downloader", StartConversionsTask, 2000, true);
 
 
             bool CleanEncodedFilesTask()
@@ -88,6 +89,13 @@ namespace AniDownloaderTerminal
             };
             Global.TaskAdmin.NewTask("PrintUpdateTable", "Downloader", PrintUpdateTableTask, 100, true);
 
+            bool SearchForNeedConvertSeriesTask()
+            {
+                SearchForNeedConvertSeries();
+                return true;
+            }
+            Global.TaskAdmin.NewTask("SearchForNeedConvertSeriesTask", "Downloader", SearchForNeedConvertSeriesTask, 60000, true);
+
             await UpdateSeries();
         }
 
@@ -97,20 +105,30 @@ namespace AniDownloaderTerminal
             {
                 try
                 {
-                    foreach (DataRow row in Global.SeriesTable.Rows)
+
+                    List<Series> seriesInTable = [];
+                    lock (Global.SeriesTable)
                     {
-                        string? sName = row["Name"].ToString();
-                        string? sPath = row["Path"].ToString();
-                        string? sFilter = row["Filter"].ToString();
-                        _ = int.TryParse(row["Offset"].ToString(), out int sOffset);
-                        if (sName == null) { continue; }
-                        if (sPath == null) { continue; }
-                        if (sPath == null) { continue; }
-                        if (sFilter == null) { continue; }
-                        Global.CurrentOpsQueue.Enqueue("Checking " + sName);
-                        if (!Directory.Exists(sPath)) Directory.CreateDirectory(sPath);
-                        Series series = new(sName, sPath, sOffset, sFilter);
-                        CurrentlyScanningSeries = "Scanning : " + sName;
+                        foreach (DataRow row in Global.SeriesTable.Rows)
+                        {
+                            string? sName = row["Name"].ToString();
+                            string? sPath = row["Path"].ToString();
+                            string? sFilter = row["Filter"].ToString();
+                            _ = int.TryParse(row["Offset"].ToString(), out int sOffset);
+
+                            if (sName == null) { continue; }
+                            if (sPath == null) { continue; }
+                            if (sFilter == null) { continue; }
+                            Global.CurrentOpsQueue.Enqueue("Checking " + sName);
+                            if (!Directory.Exists(sPath)) Directory.CreateDirectory(sPath);
+                            Series series = new(sName, sPath, sOffset, sFilter);
+                            seriesInTable.Add(series);
+                        }
+                    }
+
+                    foreach (Series series in seriesInTable)
+                    {
+                        CurrentlyScanningSeries = "Scanning : " + series.Name;
                         OnlineEpisodeElement[] filteredEpisodes = FilterFoundEpisodes(await series.GetAvailableSeriesEpisodes(), series);
 
                         foreach (OnlineEpisodeElement episodeToDownload in filteredEpisodes)
@@ -121,12 +139,13 @@ namespace AniDownloaderTerminal
                             if (CurrentSeriesDownloader.Episodes.ContainsKey(episodeName)) continue;
                             CurrentSeriesDownloader.AddTorrentToDictionary(episodeToDownload.TorrentUrl, series.Path, episodeName, episodeNumber);
                         }
-                    }
+                    }                      
+                    seriesInTable.Clear();
 
                     await Task.Run(() =>
                     {
                         CurrentlyScanningSeries = "Done scanning!";
-                        Thread.Sleep(1800000);
+                        Thread.Sleep(1800000); //Task.Delay() causes a memory leak. It's only one thread so blocking it it's okay.
                     });
                     LoadSeriesTable();
                 }
@@ -139,16 +158,40 @@ namespace AniDownloaderTerminal
 
         public void SearchForUncompletedEpisodes()
         {
-            foreach (DataRow row in Global.SeriesTable.Rows)
+            List<Tuple<String, String>> seriesRows = [];
+            lock (Global.SeriesTable)
             {
-                // Extract and validate series name and path
-                string? seriesName = row["Name"]?.ToString();
-                string? seriesPath = row["Path"]?.ToString();
-
-                if (string.IsNullOrWhiteSpace(seriesName) || string.IsNullOrWhiteSpace(seriesPath))
+                foreach (DataRow row in Global.SeriesTable.Rows)
                 {
-                    continue;
+                    string? seriesName = row["Name"]?.ToString();
+                    string? seriesPath = row["Path"]?.ToString();
+                    if (string.IsNullOrWhiteSpace(seriesName) || string.IsNullOrWhiteSpace(seriesPath))
+                    {
+                        continue;
+                    }
+                    Tuple<String, String> tup = Tuple.Create(seriesName, seriesPath);
+                    seriesRows.Add(tup);
                 }
+            }
+
+            foreach (String path in Settings.SearchPaths)
+            {
+                foreach (String subDir in Directory.EnumerateDirectories(path))
+                {
+                    if (String.IsNullOrWhiteSpace(subDir)) continue;
+                    if (!Directory.Exists(subDir)) continue;
+                    string seriesName = new DirectoryInfo(subDir).Name;
+                    string? seriesPath = Path.GetFullPath(subDir);
+                    if (seriesName == null || seriesPath == null) continue;
+                    Tuple<String, String> tup = Tuple.Create(seriesName, seriesPath);
+                    seriesRows.Add(tup);
+                }              
+            }
+
+            foreach (Tuple<String, String> row in seriesRows)
+            {
+                string seriesName = row.Item1;
+                string seriesPath = row.Item2;
 
                 Global.CurrentOpsQueue.Enqueue($"Searching unconverted files for {seriesName}");
 
@@ -161,14 +204,14 @@ namespace AniDownloaderTerminal
                 {
                     string episodeName = Path.GetFileNameWithoutExtension(tempDirPath).Trim();
 
-                    if (!int.TryParse(Regex.Match(episodeName, @"\d{1,3}$").Value, out int episodeNumber)) continue;
+                    if (!int.TryParse(TempFolderEpisodeNumberRegex().Match(episodeName).Value, out int episodeNumber)) continue;
                     if (CurrentSeriesDownloader.Episodes.ContainsKey(episodeName)) continue;
 
                     // Check for episode states
                     if (File.Exists(Path.Combine(tempDirPath, "state.DownloadedSeeding")) ||
                         File.Exists(Path.Combine(tempDirPath, "state.ReEncoding")))
                     {
-                        AddEpisode(episodeName, seriesPath, episodeNumber, State.DownloadedSeeding, "Downloaded-found");
+                        AddEpisode(episodeName, seriesPath, episodeNumber, State.DownloadedFound, "Downloaded-found");
                     }
                     else if (File.Exists(Path.Combine(tempDirPath, "state.EncodedSeeding")) ||
                              File.Exists(Path.Combine(tempDirPath, "state.EncodedFound")))
@@ -181,21 +224,204 @@ namespace AniDownloaderTerminal
             Global.CurrentOpsQueue.Enqueue("Unconverted files search done.");
         }
 
+        private void SearchForNeedConvertSeries()
+        {
+            var validExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".mkv", ".mp4" };  // Align with Series.cs
+
+            foreach (string rootPath in Settings.SearchPaths)
+            {
+                if (string.IsNullOrWhiteSpace(rootPath) || !Directory.Exists(rootPath)) continue;
+
+                foreach (string subDir in Directory.EnumerateDirectories(rootPath, "*", SearchOption.TopDirectoryOnly))  // Lazy, non-recursive
+                {
+                    Global.CurrentOpsQueue.Enqueue($"Searching unconverted files in {subDir}");
+                    string markerPath = Path.Combine(subDir, Settings.NeedsConvertFileName);
+                    if (!File.Exists(markerPath)) continue;
+
+                    string seriesName = new DirectoryInfo(subDir).Name;
+                    if (String.IsNullOrWhiteSpace(seriesName))
+                    {
+                        Global.TaskAdmin.Logger.Log($"Skipped '{subDir}'. DirectoryInfo for the path returned null or an empty string.", "SearchForNeedConvertSeries");
+                        continue;
+                    }
+
+                    try
+                    {
+                        string probeFile = Path.Combine(subDir, "probe");
+                        bool probeOk = true;
+                        if (File.Exists(probeFile))
+                        {
+                           probeOk = probeOk && DeleteFileWithRetries(probeFile, 3);
+                        }
+                        File.Create(probeFile).Close();
+                        probeOk = probeOk && DeleteFileWithRetries(probeFile, 3);
+                        if (!probeOk) throw new Exception("DeleteFileWithRetries failed.");
+                    }
+                    catch (Exception ex)
+                    {
+                        Global.TaskAdmin.Logger.EX_Log($"Probing for '{subDir}' failed. Skipping Subdirectory. Exception: {ex.Message}.", "SearchForNeedConvertSeries");
+                        continue;
+                    }
+
+                    try
+                    {
+                        // Get all files once
+                        string[] videoFiles = [.. Directory.GetFiles(subDir, "*.mkv"), .. Directory.GetFiles(subDir, "*.mp4")];
+                        if (videoFiles.Length == 0) continue;  // No files; skip (but could delete marker if empty dir desired)
+
+
+                        int queuedCount = 0;
+                        foreach (string file in videoFiles)
+                        {
+
+                            string extension = Path.GetExtension(file).ToLowerInvariant();
+                            if (!validExtensions.Contains(extension)) continue;
+
+                            string episodeName = Path.GetFileNameWithoutExtension(file).Trim();
+
+                            int? episodeNumber =  OnlineEpisodeElement.GetEpNumberFromString(episodeName);
+
+                            if (episodeNumber == null) {
+                                Global.TaskAdmin.Logger.Log($"Skipped '{file}'. No episode number found.", "SearchForNeedConvertSeries");
+                                continue;
+                            }
+                            string epNumberString = String.Format("{0:00}", episodeNumber);
+                            if (videoFiles.Length > 99)
+                            {
+                                epNumberString = String.Format("{0:000}", episodeNumber);
+                            }
+                            string destEpisodeExtension = Path.GetExtension(file).ToLowerInvariant();
+                            string destEpisodeName = seriesName + " " + epNumberString;                            
+                            string tempFolder = Path.Combine(subDir, destEpisodeName)  + ".temp"; //Temp folder is per-episode, not per series. When episode processing is complete the folder is deleted.
+                            string destEpisodePath = Path.Combine(tempFolder, destEpisodeName + destEpisodeExtension);
+                            try
+                            {
+                                if (Directory.Exists(tempFolder))
+                                {
+                                    Directory.Delete(tempFolder, true);
+                                    Global.TaskAdmin.Logger.Log($"Pre-existent temporary folder '{tempFolder}' was deleted.", "SearchForNeedConvertSeries");
+                                }
+                                Directory.CreateDirectory(tempFolder);
+                            }
+                            catch (Exception ex)
+                            {
+                                Global.TaskAdmin.Logger.EX_Log($"Failed to delete temp dir '{tempFolder}'. Exception: {ex.Message}", "SearchForNeedConvertSeries");
+                                continue;
+                            }                            
+
+
+                            if (!MoveFileWithRetries(file, destEpisodePath, 3))
+                            {
+                                Global.TaskAdmin.Logger.Log($"Skipped '{file}'. Failed to move to temp folder.", "SearchForNeedConvertSeries");
+                                continue;
+                            }
+
+                            AddEpisode(destEpisodeName, subDir, (int) episodeNumber, State.DownloadedFound, "Downloaded-Found"); //DownloadedFound = DownloadedSeeding. Added recently.
+                            queuedCount++;
+                        }
+
+                        if (queuedCount > 0)
+                        {
+                            Global.TaskAdmin.Logger.Log($"Queued {queuedCount} files of {videoFiles.Length} in '{subDir}' for Series '{seriesName}'. Missing files may not satisfy requirements, check filenames and Logs.", "SearchForNeedConvertSeries");                                                      
+                        }
+                        if (!DeleteFileWithRetries(markerPath, 3))
+                        {
+                            Global.TaskAdmin.Logger.EX_Log($"Failed to delete marker '{markerPath}'", "SearchForNeedConvertSeries");
+                            continue;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Global.TaskAdmin.Logger.EX_Log($"Error processing '{subDir}': {ex.Message}", "SearchForNeedConvertSeries");
+                    }
+
+                }
+            }
+            UpdateSeriesDataTable();
+        }
+
+
+        public static bool MoveFileWithRetries(String source, String destination, int tries)
+        {
+
+            for (int retry = 0; retry < tries; retry++)  // Retry on lock
+            {
+                try
+                {
+                    File.Move(source, destination);
+                    return true;
+                }
+                catch (IOException ex) when (retry < tries - 1)
+                {
+                    Global.TaskAdmin.Logger.EX_Log($"Retrying move for '{source}': {ex.Message}", "MoveFileWithRetries");
+                    Thread.Sleep(1000);  // 1s delay
+                }
+                catch (IOException ex)
+                {
+                    Global.TaskAdmin.Logger.EX_Log($"Failed to move '{source}': {ex.Message}", "MoveFileWithRetries");
+                }
+            }
+
+            return false;
+        }
+
+        public static bool DeleteFileWithRetries(String file, int tries)
+        {
+
+            for (int retry = 0; retry < tries; retry++)  // Retry on lock
+            {
+                try
+                {
+                    File.Delete(file);
+                    return true;
+                }
+                catch (IOException ex) when (retry < tries - 1)
+                {
+                    Global.TaskAdmin.Logger.EX_Log($"Retrying delete for '{file}': {ex.Message}", "DeleteFileWithRetries");
+                    Thread.Sleep(1000);  // 1s delay
+                }
+                catch (IOException ex)
+                {
+                    Global.TaskAdmin.Logger.EX_Log($"Failed to delete '{file}': {ex.Message}", "DeleteFileWithRetries");
+                }
+            }
+
+            return false;
+        }
+
         private void AddEpisode(string episodeName, string seriesPath, int episodeNumber, State state, string status)
         {
             // Clean up existing file if necessary
             string episodePath = Path.Combine(seriesPath, episodeName);
-            if (File.Exists(episodePath)) File.Delete(episodePath);
+            string mkvFile = episodePath + ".mkv";
+            string mp4File = episodePath + ".mp4";
+            if (File.Exists(mkvFile))
+            {
+                if (!DeleteFileWithRetries(mkvFile, 3)) {
+                    Global.TaskAdmin.Logger.EX_Log($"Could not Add '{episodeName}' because another file already exists and could not be deleted. ", "AddEpisode");
+                    return;
+                }
+                
+            }
+            if (File.Exists(mp4File))
+            {
+                if (!DeleteFileWithRetries(mp4File, 3))
+                {
+                    Global.TaskAdmin.Logger.EX_Log($"Could not Add '{episodeName}' because another file already exists and could not be deleted. ", "AddEpisode");
+                    return;
+                }
+            }
+
             var episode = new SeriesDownloader.EpisodeToDownload("", episodeName, seriesPath, episodeNumber);
             episode.SetState(state);
             episode.StatusDescription = status;
-            CurrentSeriesDownloader.AddFoundEpisodeToDictionary(episode);
+            CurrentSeriesDownloader.AddFoundEpisodeToDictionary(episode); //AddFoundEpisodeToDictionary has lock for Episodes dictionary inside.
         }
 
         private static OnlineEpisodeElement[] FilterFoundEpisodes(OnlineEpisodeElement[] episodes, Series series)
         {
-            Dictionary<int, OnlineEpisodeElement> bestEpisodes = new();
-            List<OnlineEpisodeElement> preFilteredEpisodes = new();
+            Dictionary<int, OnlineEpisodeElement> bestEpisodes = [];
+            List<OnlineEpisodeElement> preFilteredEpisodes = [];
 
             int[] downloadedEpisodes = series.GetEpisodesDownloaded();
 
@@ -223,11 +449,7 @@ namespace AniDownloaderTerminal
 
                 int epNum = (int)episode.ProbableEpNumber;
 
-                if (!bestEpisodes.ContainsKey(epNum))
-                {
-                    bestEpisodes.Add(epNum, episode);
-                }
-                else
+                if (!bestEpisodes.TryAdd(epNum, episode))
                 {
                     if (episode.SizeMiB > bestEpisodes[epNum].SizeMiB || Global.TrySelectUncensoredEpisode(episode, bestEpisodes[epNum]) == episode)
                     {
@@ -236,7 +458,7 @@ namespace AniDownloaderTerminal
                 }
             }
 
-            return bestEpisodes.Values.ToArray();
+            return [.. bestEpisodes.Values];
         }
 
         public static void SetUpdateEpisodesStatusTable(SeriesDownloader.EpisodeToDownload episodeElement)
@@ -277,14 +499,17 @@ namespace AniDownloaderTerminal
 
         private void UpdateSeriesDataTable()
         {
-            List<string> episodes = new();
-
-            foreach (KeyValuePair<string, SeriesDownloader.EpisodeToDownload> pair in CurrentSeriesDownloader.Episodes)
+            List<string> episodes = [];
+            
+            lock (CurrentSeriesDownloader.Episodes)
             {
-                SeriesDownloader.EpisodeToDownload episode = pair.Value;
-                SetUpdateEpisodesStatusTable(episode);
-                episodes.Add(episode.Name);
-            }
+                foreach (KeyValuePair<string, SeriesDownloader.EpisodeToDownload> pair in CurrentSeriesDownloader.Episodes)
+                {
+                    SeriesDownloader.EpisodeToDownload episode = pair.Value;
+                    SetUpdateEpisodesStatusTable(episode);
+                    episodes.Add(episode.Name);
+                }
+            }            
             
             lock (Global.CurrentStatusTable)
             {
@@ -398,46 +623,48 @@ namespace AniDownloaderTerminal
 
             if (File.Exists(Global.SeriesTableFilePath))
             {
-                try
+                lock (Global.SeriesTable)
                 {
-                    Global.SeriesTable.ReadXml(Global.SeriesTableFilePath);
-                }
-                catch (Exception ex)
-                {
-                    Global.TaskAdmin.Logger.EX_Log(ex.Message, "LoadSeriesTable");
-                }
+                    try
+                    {
+                        Global.SeriesTable.ReadXml(Global.SeriesTableFilePath);
+                    }
+                    catch (Exception ex)
+                    {
+                        Global.TaskAdmin.Logger.EX_Log(ex.Message, "LoadSeriesTable");
+                    }
+                }               
             }
             else
-            {               
-                
-                if (!Global.SeriesTable.Columns.Contains("Name"))
-                {
-                    DataColumn[] keys = new DataColumn[1];
-                    DataColumn SeriesColumn = new("Name", typeof(string));
-                    Global.SeriesTable.Columns.Add(SeriesColumn);
-                    keys[0] = SeriesColumn;
-                    Global.SeriesTable.PrimaryKey = keys;
-                }
+            {
+                lock (Global.SeriesTable) {
+                    if (!Global.SeriesTable.Columns.Contains("Name"))
+                    {
+                        DataColumn[] keys = new DataColumn[1];
+                        DataColumn SeriesColumn = new("Name", typeof(string));
+                        Global.SeriesTable.Columns.Add(SeriesColumn);
+                        keys[0] = SeriesColumn;
+                        Global.SeriesTable.PrimaryKey = keys;
+                    }
 
-                if (!Global.SeriesTable.Columns.Contains("Path"))
-                {
-                    DataColumn SeriesPath = new("Path", typeof(string));
-                    Global.SeriesTable.Columns.Add(SeriesPath);
-                }
+                    if (!Global.SeriesTable.Columns.Contains("Path"))
+                    {
+                        DataColumn SeriesPath = new("Path", typeof(string));
+                        Global.SeriesTable.Columns.Add(SeriesPath);
+                    }
 
-                if (!Global.SeriesTable.Columns.Contains("Offset"))
-                {
-                    DataColumn Offset = new("Offset", typeof(string));
-                    Global.SeriesTable.Columns.Add(Offset);
-                }
+                    if (!Global.SeriesTable.Columns.Contains("Offset"))
+                    {
+                        DataColumn Offset = new("Offset", typeof(string));
+                        Global.SeriesTable.Columns.Add(Offset);
+                    }
 
-                if (!Global.SeriesTable.Columns.Contains("Filter"))
-                {
-                    DataColumn Filter = new("Filter", typeof(string));
-                    Global.SeriesTable.Columns.Add(Filter);
-                }               
-
-                
+                    if (!Global.SeriesTable.Columns.Contains("Filter"))
+                    {
+                        DataColumn Filter = new("Filter", typeof(string));
+                        Global.SeriesTable.Columns.Add(Filter);
+                    }
+               }                         
             }
             lock (Global.CurrentStatusTable)
             {
@@ -466,7 +693,5 @@ namespace AniDownloaderTerminal
             }
         }
     }
-
-
 }
 

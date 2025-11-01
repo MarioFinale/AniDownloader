@@ -1,6 +1,5 @@
 ﻿using System.Data;
 using System.Net;
-using System.Net.Sockets;
 using System.Text;
 
 namespace AniDownloaderTerminal
@@ -9,6 +8,9 @@ namespace AniDownloaderTerminal
     {
         private string url = $"http://{Settings.ListeningIP}:{Settings.WebserverPort}/";
         private string pageData = string.Empty;
+
+        private Dictionary<string, DateTime> lastReAuthTimes = new Dictionary<string, DateTime>();
+        private Dictionary<string, bool> forcingReAuth = new Dictionary<string, bool>();
 
         public async Task HandleIncomingConnections(HttpListener listener)
         {
@@ -66,27 +68,54 @@ namespace AniDownloaderTerminal
                     }
                 }
 
+               
+                */
+
                 // Validate Basic Auth credentials
                 if (ctx.User == null || ctx.User.Identity == null || !ctx.User.Identity.IsAuthenticated)
                 {
-                    resp.StatusCode = 401;  // Unauthorized
+                    resp.StatusCode = 401; // Unauthorized
                     resp.Headers.Add("WWW-Authenticate", "Basic realm=\"Secure Area\"");
                     resp.Close();
                     continue;
                 }
-
                 HttpListenerBasicIdentity identity = (HttpListenerBasicIdentity)ctx.User.Identity;
-                string username = identity.Name;  // From settings
-                string password = identity.Password;  // From settings
-
+                string username = identity.Name; // From settings
+                string password = identity.Password; // From settings
                 if (username != Settings.UserName || password != Settings.Password)
                 {
-                    resp.StatusCode = 401;  // Unauthorized
+                    resp.StatusCode = 401; // Unauthorized
                     resp.Headers.Add("WWW-Authenticate", "Basic realm=\"Secure Area\"");
                     resp.Close();
                     continue;
                 }
-                */
+
+                IPAddress remoteIp = ctx.Request.RemoteEndPoint.Address;
+                if (remoteIp.IsIPv4MappedToIPv6) remoteIp = remoteIp.MapToIPv4();
+
+                // NEW: Force re-auth logic (credentials are valid at this point)
+                string ipKey = remoteIp.ToString();
+                if (!lastReAuthTimes.TryGetValue(ipKey, out DateTime lastTime) || DateTime.Now - lastTime > TimeSpan.FromHours(24))
+                {
+                    if (!forcingReAuth.TryGetValue(ipKey, out bool isForcing) || !isForcing)
+                    {
+                        forcingReAuth[ipKey] = true;
+                        resp.StatusCode = 401;
+                        resp.Headers.Add("WWW-Authenticate", "Basic realm=\"Secure Area\"");
+                        resp.Close();
+                        continue;
+                    }
+                    else
+                    {
+                        forcingReAuth.Remove(ipKey); // Clean up
+                        lastReAuthTimes[ipKey] = DateTime.Now;
+                        // Proceed to handle the request
+                    }
+                }
+                else
+                {
+                    // Proceed to handle the request
+                }
 
                 string responseData = string.Empty;
 
@@ -94,9 +123,9 @@ namespace AniDownloaderTerminal
                 {
                     using var reader = new StreamReader(req.InputStream, req.ContentEncoding);
                     string text = reader.ReadToEnd();
-                    string[] webParams = text.Split("&").Select(x => System.Web.HttpUtility.UrlDecode(x)).ToArray();
+                    string[] webParams = [.. text.Split("&").Select(x => System.Web.HttpUtility.UrlDecode(x))];
 
-                    Dictionary<int, WebTable> paramsDic = new();
+                    Dictionary<int, WebTable> paramsDic = [];
                     try
                     {
                         foreach (string postParam in webParams)
@@ -106,10 +135,9 @@ namespace AniDownloaderTerminal
                             int paramID = int.Parse(subparams[0].Split("-")[1]);
                             string paramName = subparams[0].Split("-")[0].Trim();
 
-                            if (!paramsDic.ContainsKey(paramID))
-                            {
-                                WebTable tab = new();
-                                paramsDic.Add(paramID, tab);
+                            if (!paramsDic.TryGetValue(paramID, out WebTable? value))
+                            {                             
+                                if (value != null) paramsDic.Add(paramID, value);
                             }
 
                             switch (paramName)
@@ -155,7 +183,7 @@ namespace AniDownloaderTerminal
                 {
                     using var reader = new StreamReader(req.InputStream, req.ContentEncoding);
                     string text = reader.ReadToEnd();
-                    string[] webParams = text.Split("&").Select(x => System.Web.HttpUtility.UrlDecode(x)).ToArray();
+                    string[] webParams = [.. text.Split("&").Select(x => System.Web.HttpUtility.UrlDecode(x))];
                     File.WriteAllLines(Global.SettingsPath, webParams);
                     Program.settings.LoadAndValidateSettingsFile();
                 }
@@ -224,6 +252,8 @@ namespace AniDownloaderTerminal
 
                 pageData = pageData.Replace("ListeningIP-replace", Settings.ListeningIP.ToString());
                 pageData = pageData.Replace("DefaultPath-replace", Settings.DefaultPath.ToString().Replace("\"", "&quot;"));
+                pageData = pageData.Replace("NeedsConvertFileName-replace", Settings.NeedsConvertFileName.ToString().Replace("\"", "&quot;"));
+                pageData = pageData.Replace("SearchPaths-replace", String.Join(";", Settings.SearchPaths).Replace("\"", "&quot;"));
                 pageData = pageData.Replace("UncensoredEpisodeRegex-replace", Settings.UncensoredEpisodeRegex.ToString().Replace("\"", "&quot;"));
                 pageData = pageData.Replace("CustomLanguageNameRegex-replace", Settings.CustomLanguageNameRegex.ToString().Replace("\"", "&quot;"));
                 pageData = pageData.Replace("CustomLanguageDescriptionRegex-replace", Settings.CustomLanguageDescriptionRegex.ToString().Replace("\"", "&quot;"));
@@ -289,10 +319,15 @@ namespace AniDownloaderTerminal
 
         public void Init()
         {
+
+            var timer = new System.Timers.Timer(TimeSpan.FromHours(24).TotalMilliseconds);
+            timer.Elapsed += (sender, e) => { lastReAuthTimes.Clear(); forcingReAuth.Clear(); };
+            timer.AutoReset = true;
+            timer.Start();
+
             bool WebServer()
             {
                 if (!Settings.EnableWebServer) return true;
-                // Create a Http server and start listening for incoming connections
                 url = $"http://{Settings.ListeningIP}:{Settings.WebserverPort}/";
                 using HttpListener listener = new();
                 try
@@ -356,7 +391,7 @@ namespace AniDownloaderTerminal
             DataTable dt;
             lock (table)
             {
-                dt = table.Clone(); //Clone the dataTable to avoid collection modified exceptions.
+                dt = table.Copy(); //Copy the dataTable to avoid collection modified exceptions.
             }
             string html = "";
             for (int i = 0; i < dt.Rows.Count; i++)

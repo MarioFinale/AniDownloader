@@ -1,10 +1,8 @@
-﻿using System.Globalization;
-using System.Net.Http;
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 
 namespace AniDownloaderTerminal
 {
-    public class OnlineEpisodeElement
+    public partial class OnlineEpisodeElement
     {
         public string ViewUrl { get; }
         public string TorrentUrl { get; }
@@ -16,7 +14,7 @@ namespace AniDownloaderTerminal
         public string ProbableRes { get; }
         public int Seeders { get; }
 
-        private int _ProbableEpNumber;
+        private int? _ProbableEpNumber;
         public int? ProbableEpNumber { get { return _ProbableEpNumber; } }
         public Lang ProbableLang { get; set; }
         private bool _IsAnime;
@@ -26,12 +24,31 @@ namespace AniDownloaderTerminal
         private bool _IsTooNew;
         public bool IsTooNew { get { return _IsTooNew; } }
         public bool TooFewSeeders { get { return _TooFewSeeders; } }
-        private bool _TooFewSeeders;
+        private readonly bool _TooFewSeeders;
+
+        [GeneratedRegex("<pubDate>(.+)<\\/pubDate>[\\s\\S]+?CDATA.+?#(\\d{1,8}) \\| (.+?)<\\/a\\> \\| (.+?) \\| (.+?) \\| (.+?)\\]")]
+        private static partial Regex NyaaCDATARegex();
+        [GeneratedRegex("\\<nyaa\\:seeders\\>(\\d+)\\<\\/nyaa\\:seeders\\>")]
+        private static partial Regex NyaaSeedersRegex();
+        [GeneratedRegex(@"(\d{3,4})[pi]")]
+        private static partial Regex ResolutionRegex();
+        [GeneratedRegex(", (\\d{1,2}) (\\w{3,4}) (\\d{4})")]
+        private static partial Regex DateRegex();
+        [GeneratedRegex(@"(?:s\d{1,2} *ep|ep| - |s\d{1,2}e)(\d{1,2})|(\d{1,2}) of \d{1,2}", RegexOptions.IgnoreCase | RegexOptions.Singleline, "en-001")]
+        private static partial Regex EpisodeNumberRegex();
+        [GeneratedRegex(@"[^\w]eng\w*|english")]
+        private static partial Regex EngLangRegex();
+        [GeneratedRegex("<pubDate>(.+)<\\/pubDate>[\\s\\S]+?CDATA.+?#(\\d{1,8}) \\| (.+?)<\\/a\\> \\| (.+?) \\| (.+?) \\| (.+?)\\]")]
+        private static partial Regex OnlineEpisodesRegex();
+        [GeneratedRegex("id=\"torrent-description\">(.*?)<\\/div>", RegexOptions.Singleline)]
+        private static partial Regex NyaaDescriptionRegex();
+        [GeneratedRegex("[^\\w]eng[^\\w]|english", RegexOptions.IgnoreCase, "en-001")]
+        private static partial Regex NyaaEnglishLangDescriptionRegex();
 
 
         public OnlineEpisodeElement(string webCode)
         {
-            Match match = Regex.Match(webCode, "<pubDate>(.+)<\\/pubDate>[\\s\\S]+?CDATA.+?#(\\d{1,8}) \\| (.+?)<\\/a\\> \\| (.+?) \\| (.+?) \\| (.+?)\\]");
+            Match match = NyaaCDATARegex().Match(webCode);
 
             if (!match.Success)
                 throw new InvalidDataException("Input string does not match nyaa.si cdata description format.");
@@ -40,23 +57,23 @@ namespace AniDownloaderTerminal
             Name = match.Groups[3].Value.Trim();
             string sizeStr = match.Groups[4].Value.Trim();
             SizeMiB = Global.ParseFileSize(sizeStr);
-            Seeders = parseSeeders(webCode);
+            Seeders = ParseSeeders(webCode);
             Category = match.Groups[5].Value.Trim();
             Hash = match.Groups[6].Value.Trim();
 
             ViewUrl = $"https://nyaa.si/view/{Id}";
             TorrentUrl = $"https://nyaa.si/download/{Id}.torrent";
             ProbableLang = Lang.Undefined;
-            ProbableRes = DetermineResolution();
+            ProbableRes = DetermineResolution(Name);
             _IsTooOld = _TooFewSeeders = false;
             _TooFewSeeders = Settings.TooFewSeeders >= Seeders;
             SetAgeFromPubDate(match.Groups[1].Value.Trim());
-            SetEpisodeNumber();
+            SetEpisodeNumber(Name);
             DetermineLanguage();
         }
 
-        private int parseSeeders(string webcode) {
-            Match match = Regex.Match(webcode, "\\<nyaa\\:seeders\\>(\\d+)\\<\\/nyaa\\:seeders\\>");
+        private static int ParseSeeders(string webcode) {
+            Match match = NyaaSeedersRegex().Match(webcode);
             if (match.Success) { 
                 string seedersString = match.Groups[1].Value.Trim();
                 return int.Parse(seedersString);
@@ -64,16 +81,16 @@ namespace AniDownloaderTerminal
             return 0;
         }
 
-        private string DetermineResolution()
+        private string DetermineResolution(String content)
         {
-            Match resMatch = Regex.Match(Name, @"(\d{3,4})[pi]");
+            Match resMatch = ResolutionRegex().Match(content);
             return resMatch.Success ? resMatch.Value.Trim() : SizeMiB > 500 ? "1080p" : "720p";
         }
 
 
         private void SetAgeFromPubDate(string pubdate)
         {
-            var dateMatch = Regex.Match(pubdate, ", (\\d{1,2}) (\\w{3,4}) (\\d{4})");
+            var dateMatch = DateRegex().Match(pubdate);
             if (dateMatch.Success)
             {
                 var day = int.Parse(dateMatch.Groups[1].Value);
@@ -104,13 +121,18 @@ namespace AniDownloaderTerminal
             _ => 1 
         };
 
-        private void SetEpisodeNumber()
+        private void SetEpisodeNumber(String content)
         {
-            var epMatch = Regex.Match(Name, @"(?:s\d{1,2} *ep|ep| - |s\d{1,2}e)(\d{1,2})|(\d{1,2}) of \d{1,2}", RegexOptions.IgnoreCase | RegexOptions.Singleline);
-            if (epMatch.Success)
-            {
-                _ProbableEpNumber = int.Parse(epMatch.Groups[1].Success ? epMatch.Groups[1].Value : epMatch.Groups[2].Value);
-            }
+
+            _ProbableEpNumber = GetEpNumberFromString(content);
+           
+        }
+
+        public static int? GetEpNumberFromString(String str)
+        {
+            var epMatch = EpisodeNumberRegex().Match(str);
+            if (epMatch.Success) return int.Parse(epMatch.Groups[1].Success ? epMatch.Groups[1].Value : epMatch.Groups[2].Value);
+            return null;
         }
 
         private void DetermineLanguage()
@@ -120,7 +142,7 @@ namespace AniDownloaderTerminal
             {
                 var nameLower = Name.ToLowerInvariant();
                 var isCustom = Regex.IsMatch(nameLower, Settings.CustomLanguageNameRegex);
-                var isEnglish = Regex.IsMatch(nameLower, @"[^\w]eng\w*|english");
+                var isEnglish = EngLangRegex().IsMatch(nameLower);
 
                 if (isCustom && isEnglish) ProbableLang = Lang.CustomAndEng;
                 else if (isCustom) ProbableLang = Lang.Custom;
@@ -136,14 +158,14 @@ namespace AniDownloaderTerminal
 
         public static string[] GetOnlineEpisodesListFromContent(string content)
         {
-            MatchCollection matches = Regex.Matches(content, "<pubDate>(.+)<\\/pubDate>[\\s\\S]+?CDATA.+?#(\\d{1,8}) \\| (.+?)<\\/a\\> \\| (.+?) \\| (.+?) \\| (.+?)\\]");
-            return matches.Select(i => i.Value).ToArray();
+            MatchCollection matches = OnlineEpisodesRegex().Matches(content);
+            return [.. matches.Select(i => i.Value)];
         }
 
         public Lang GetProbableLanguage()
         {
             string pageText = Global.GetWebStringFromUrlNonAsync(ViewUrl);
-            Match descriptionMatch = Regex.Match(pageText, "id=\"torrent-description\">(.*?)<\\/div>", RegexOptions.Singleline);
+            Match descriptionMatch = NyaaDescriptionRegex().Match(pageText);
             Lang resultLang = Lang.Undefined;
 
             if (descriptionMatch.Success)
@@ -151,7 +173,7 @@ namespace AniDownloaderTerminal
                 string description = Name + " " + descriptionMatch.Groups[1].Value;
 
                 bool isCustom = Regex.Match(description, Settings.CustomLanguageDescriptionRegex, RegexOptions.IgnoreCase).Success;
-                bool isEnglish = Regex.Match(description, "[^\\w]eng[^\\w]|english", RegexOptions.IgnoreCase).Success;
+                bool isEnglish = NyaaEnglishLangDescriptionRegex().Match(description).Success;
 
                 if (isCustom && isEnglish)
                 {
@@ -169,8 +191,6 @@ namespace AniDownloaderTerminal
 
             return resultLang;
         }
-
-
     }
 
 }

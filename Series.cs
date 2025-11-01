@@ -1,17 +1,19 @@
-﻿using System;
-using System.Runtime.Serialization;
+﻿using System.Runtime.Serialization;
 using System.Text.RegularExpressions;
 
 namespace AniDownloaderTerminal
 {
     [Serializable]
-    public class Series : ISerializable
+    public partial class Series : ISerializable
     {
         public string Name { get; }
         public string Path { get; }
         public int Offset { get; }
-
         public string Filter { get; }
+
+
+        [GeneratedRegex(@"(\d{2,3})\.(?:mp4|mkv)", RegexOptions.IgnoreCase, "en-001")]
+        private static partial Regex DownloadedEpisodeNumberRegex();
 
         public Series(string name, string path, int offset, string filter) 
         {
@@ -43,22 +45,22 @@ namespace AniDownloaderTerminal
 
         public string[] GetAllEpisodeFiles()
         {
-            HashSet<string> episodes = new();
-            HashSet<string> validExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".mkv", ".mp4" };
+            HashSet<string> episodes = [];
+            HashSet<string> validExtensions = new(StringComparer.OrdinalIgnoreCase) { ".mkv", ".mp4" };
             foreach (string fileName in Directory.GetFiles(Path))
             {
                 if (validExtensions.Contains(System.IO.Path.GetExtension(fileName))) episodes.Add(fileName);
 
             }
-            return episodes.ToArray();
+            return [.. episodes];
         }
 
         public int[] GetEpisodesDownloaded()
         {
-           HashSet<int> episodes = new();
+           HashSet<int> episodes = [];
            foreach (string fileName in Directory.GetFiles(Path))
             {
-                Match match = Regex.Match(fileName, @"(\d{2,3})\.(?:mp4|mkv)", RegexOptions.IgnoreCase);
+                Match match = DownloadedEpisodeNumberRegex().Match(fileName);
                 if (match.Success)
                 {
                     string epNumStr = match.Groups[1].Value;
@@ -66,13 +68,13 @@ namespace AniDownloaderTerminal
                     episodes.Add(epNum);
                 }
             }
-           return episodes.ToArray();
+           return [.. episodes];
         }
 
         public int[] GetSubsDownloaded(string shortLang)
         {
             if (shortLang == null) throw new ArgumentNullException(shortLang);
-            HashSet<int> subs = new();
+            HashSet<int> subs = [];
             foreach (string fileName in System.IO.Directory.GetFiles(Path))
             {
                 Match match = Regex.Match(fileName, @"(\d{2,3})\." + shortLang + "(.ass|.srt)");
@@ -83,7 +85,7 @@ namespace AniDownloaderTerminal
                     subs.Add(subNum);
                 }
             }
-            return subs.ToArray();
+            return [.. subs];
         }
 
         public void GetObjectData(SerializationInfo info, StreamingContext context)
@@ -102,7 +104,7 @@ namespace AniDownloaderTerminal
 
         public async Task<OnlineEpisodeElement[]> GetAvailableSeriesEpisodes()
         {
-            List<OnlineEpisodeElement> episodes = new();
+            List<OnlineEpisodeElement> episodes = [];
             string seriesUrlEncoded = System.Web.HttpUtility.UrlEncode(Name);
             string content = await Global.GetWebStringFromUrl("https://nyaa.si/?page=rss&q=" + seriesUrlEncoded + "&c=1_0&f=0");
             string[] list = OnlineEpisodeElement.GetOnlineEpisodesListFromContent(content);
@@ -120,7 +122,7 @@ namespace AniDownloaderTerminal
                 {
                     if (Regex.Match(element.Name, Filter).Success) continue;
                 }
-                if (Settings.ExcludeBatchReleases && element.Name.ToUpperInvariant().Contains("BATCH")) continue;
+                if (Settings.ExcludeBatchReleases && element.Name.Contains("BATCH", StringComparison.InvariantCultureIgnoreCase)) continue;
                 if (element.SizeMiB > Settings.MaxFileSizeMb)
                 {
                     Global.TaskAdmin.Logger.Log($"{element.Name} discarded due to big size (over { Settings.MaxFileSizeMb} MB).", "GetAvailableSeriesEpisodes");
@@ -131,9 +133,7 @@ namespace AniDownloaderTerminal
                 episodes.Add(element);
             }
             Global.CurrentOpsQueue.Enqueue($"Found {episodesFound} episode candidate{(episodesFound == 1 ? String.Empty : 's' )} online.");
-            return episodes.ToArray();
+            return [.. episodes];
         }
-    }   
-
-
+    }
 }
