@@ -360,7 +360,7 @@ namespace AniDownloaderTerminal
             DataTable dt;
             lock (table)
             {
-                dt = table.Clone(); //Clone the dataTable to avoid collection modified exceptions.
+                dt = table.Copy(); //Copy the dataTable to avoid collection modified exceptions.
             }
 
             string html = $"<table id=\"{dt.TableName}\" class=\"table\">";
