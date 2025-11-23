@@ -20,7 +20,7 @@ AniDownloader is a terminal-based application for automatically managing anime s
 
 ## Requirements
 
-- **.NET 6**: AniDownloader requires .NET 6, which can be installed from the official [Microsoft .NET website](https://dotnet.microsoft.com/download/dotnet/6.0).
+- **.NET 8**: AniDownloader requires .NET 8, which can be installed from the official [Microsoft .NET website](https://dotnet.microsoft.com/download/dotnet/8.0).
 - **FFmpeg**: Ensure FFmpeg is installed on your system for transcoding functionality. Installation instructions can be found at [FFmpeg.org](https://ffmpeg.org/).
 - **mkvmerge**: If you use MKV as a container. Used to optimize MKV files for quick seeking/streaming. Check [The MKVToolNix website](https://mkvtoolnix.org/) for more info about this tool.
 
@@ -29,7 +29,7 @@ AniDownloader is a terminal-based application for automatically managing anime s
 Clone the repository and navigate to the directory:
 
 ```bash
-git clone https://github.com/yourusername/AniDownloader.git
+git clone https://github.com/MarioFinale/AniDownloader.git
 cd AniDownloader
 ```
 
