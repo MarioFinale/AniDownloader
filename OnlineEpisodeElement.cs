@@ -34,7 +34,7 @@ namespace AniDownloaderTerminal
         private static partial Regex ResolutionRegex();
         [GeneratedRegex(", (\\d{1,2}) (\\w{3,4}) (\\d{4})")]
         private static partial Regex DateRegex();
-        [GeneratedRegex(@"(?:s\d{1,2} *ep|ep| - |s\d{1,2}e|^\w+ )(\d{1,2})|(\d{1,2}) of \d{1,2}", RegexOptions.IgnoreCase | RegexOptions.Singleline, "en-001")]
+        [GeneratedRegex(@"(?:s\d{1,2} *ep|ep| - |s\d{1,2}e|^[\w ]+ )(\d{1,2})|(\d{1,2}) of \d{1,2}", RegexOptions.IgnoreCase | RegexOptions.Singleline, "en-001")]
         private static partial Regex EpisodeNumberRegex();
         [GeneratedRegex(@"[^\w]eng\w*|english")]
         private static partial Regex EngLangRegex();
