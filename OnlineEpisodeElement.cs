@@ -34,7 +34,7 @@ namespace AniDownloaderTerminal
         private static partial Regex ResolutionRegex();
         [GeneratedRegex(", (\\d{1,2}) (\\w{3,4}) (\\d{4})")]
         private static partial Regex DateRegex();
-        [GeneratedRegex(@"(?:s\d{1,2} *ep|ep| - |s\d{1,2}e|^[\D ]+ )(\d{1,2})|(\d{1,2}) of \d{1,2}", RegexOptions.IgnoreCase | RegexOptions.Singleline, "en-001")]
+        [GeneratedRegex(@"(?:s\d{1,2} *ep|ep| - |s\d{1,2}e)[ _-]*(\d{1,2})|(\d{1,2}) of \d{1,2}|^[\D ]+ (\d{1,2})(?:$|\.\D{1,3}$)", RegexOptions.IgnoreCase | RegexOptions.Singleline, "en-001")]
         private static partial Regex EpisodeNumberRegex();
         [GeneratedRegex(@"[^\w]eng\w*|english")]
         private static partial Regex EngLangRegex();
@@ -54,7 +54,7 @@ namespace AniDownloaderTerminal
                 throw new InvalidDataException("Input string does not match nyaa.si cdata description format.");
 
             Id = int.Parse(match.Groups[2].Value.Trim());
-            Name = match.Groups[3].Value.Trim();
+            Name = match.Groups[3].Value.Trim().Replace("_", " "); //Treat underscores like spaces. Some uploads are like that.
             string sizeStr = match.Groups[4].Value.Trim();
             SizeMiB = Global.ParseFileSize(sizeStr);
             Seeders = ParseSeeders(webCode);

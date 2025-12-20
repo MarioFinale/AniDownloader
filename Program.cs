@@ -25,8 +25,8 @@ namespace AniDownloaderTerminal
 
         public static void Main()
         {
-            Program program = new();
             settings.Init();
+            Program program = new();
             webserver.Init();            
             var task = Task.Run(async () => { await program.Start(); });
             task.Wait();
