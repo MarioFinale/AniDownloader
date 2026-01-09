@@ -224,16 +224,28 @@
 
         <script type="text/javascript">
             function addRow() {
-                var rowNumber = document.getElementById("Series").rows.length - 1;
+                var tbody = document.getElementById("Series_Body");
+                var rows = tbody.getElementsByTagName("tr");
+                var maxIndex = -1;
+                for (var i = 0; i < rows.length; i++) {
+                    var id = rows[i].id;
+                    if (id && id.startsWith("sr_")) {
+                        var num = parseInt(id.substring(3), 10);
+                        if (!isNaN(num) && num > maxIndex) {
+                            maxIndex = num;
+                        }
+                    }
+                }
+                var rowNumber = maxIndex + 1;
                 var element = '<tr id="sr_' + rowNumber + '">\
-                                                                <td><input style=\"width:105%; padding:inherit; box-sizing:border-box;\" type=\"text\" name=\"Name-'+ rowNumber + '\" value=\"\"/></td>\
-                                                                <td><input style=\"width:105%; padding:inherit; box-sizing:border-box;\" type=\"text\" name=\"Path-'+ rowNumber + '\" value=\"DefaultPath-replace\"/></td>\
-                                                                <td><input style=\"width:105%; padding:inherit; box-sizing:border-box;\" type=\"text\" name=\"Offset-'+ rowNumber + '\" value=\"0\"/></td>\
-                                                                <td><input style=\"width:105%; padding:inherit; box-sizing:border-box;\" type=\"text\" name=\"Filter-'+ rowNumber + '\" value=\"\"/></td>\
-                                                                <td><button id=\"del-' + rowNumber + '\" type=\"button\" onclick=\"deleteRow(' + rowNumber + ')\">x</button></td>\
-                                                                </tr>'
-                document.getElementById("Series_Body").innerHTML += element;
-            }
+ <td><input style=\"width:105%; padding:inherit; box-sizing:border-box;\" type=\"text\" name=\"Name-'+ rowNumber + '\" value=\"\"/></td>\
+ <td><input style=\"width:105%; padding:inherit; box-sizing:border-box;\" type=\"text\" name=\"Path-'+ rowNumber + '\" value=\"DefaultPath-replace\"/></td>\
+ <td><input style=\"width:105%; padding:inherit; box-sizing:border-box;\" type=\"text\" name=\"Offset-'+ rowNumber + '\" value=\"0\"/></td>\
+ <td><input style=\"width:105%; padding:inherit; box-sizing:border-box;\" type=\"text\" name=\"Filter-'+ rowNumber + '\" value=\"\"/></td>\
+ <td><button id=\"del-' + rowNumber + '\" type=\"button\" onclick=\"deleteRow(' + rowNumber + ')\">x</button></td>\
+    </tr>';
+                tbody.innerHTML += element;
+            }          
 
             function deleteRow(index) {
                 document.getElementById("sr_" + index).remove();
