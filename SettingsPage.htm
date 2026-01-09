@@ -248,23 +248,79 @@
             }          
 
             function deleteRow(index) {
-                document.getElementById("sr_" + index).remove();
+                var seriesBody = document.getElementById("Series_Body");
+                var row = seriesBody.querySelector("#sr_" + index);
+                if (row) {
+                    row.remove();
+                }
             }
 
             function updateTableContents(id) {
                 (async () => {
                     let response = await fetch('./status');
-                    let termresult = await response.text();
-                    document.getElementById(id).innerHTML = termresult;
-                }) ();
+                    let newHtml = await response.text();
+
+                    // Create a temporary table to parse the new rows properly
+                    let tempTable = document.createElement('table');
+                    tempTable.innerHTML = '<tbody>' + newHtml + '</tbody>';
+                    let newRows = Array.from(tempTable.querySelectorAll('tr'));
+
+                    // Get existing tbody and rows
+                    let tbody = document.getElementById(id);
+                    let existingRows = Array.from(tbody.querySelectorAll('tr'));
+
+                    // Map existing rows by unique key (using "Episode" from second <td>)
+                    let existingMap = new Map();
+                    existingRows.forEach(row => {
+                        let key = row.querySelector('td:nth-child(2)')?.textContent.trim();
+                        if (key) existingMap.set(key, row);
+                    });
+
+                    // Clear tempTable to avoid memory leaks
+                    tempTable = null;
+
+                    // Track seen keys for removal later
+                    let seenKeys = new Set();
+
+                    newRows.forEach(newRow => {
+                        let key = newRow.querySelector('td:nth-child(2)')?.textContent.trim();
+                        if (!key) return; // Skip invalid rows
+
+                        seenKeys.add(key);
+
+                        let existingRow = existingMap.get(key);
+                        if (existingRow) {
+                            // Update existing row: Compare and update cells if changed
+                            let newCells = newRow.querySelectorAll('td');
+                            let existingCells = existingRow.querySelectorAll('td');
+                            for (let i = 0; i < existingCells.length; i++) {
+                                if (existingCells[i].innerHTML !== newCells[i].innerHTML) {
+                                    existingCells[i].innerHTML = newCells[i].innerHTML;
+                                }
+                            }
+                        } else {
+                            // Add new row
+                            tbody.appendChild(newRow.cloneNode(true)); // Clone to avoid moving from temp
+                        }
+                    });
+
+                    // Remove rows no longer present
+                    existingRows.forEach(row => {
+                        let key = row.querySelector('td:nth-child(2)')?.textContent.trim();
+                        if (key && !seenKeys.has(key)) {
+                            row.remove();
+                        }
+                    });
+                })();
             }
+
             function updateCurrentOperation(id) {
                 (async () => {
                     let response = await fetch('./currentoperation');
                     let termresult = await response.text();
                     document.getElementById(id).innerHTML = termresult;
-                })();
-            }
+                })()
+            };
 
 
             (function () { //Auto-update the table every 300ms

@@ -20,7 +20,7 @@
 
   <ItemGroup>
     <None Update="SettingsPage.htm">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
     <None Update="style.css">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

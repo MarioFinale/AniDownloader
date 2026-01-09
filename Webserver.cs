@@ -402,7 +402,7 @@ namespace AniDownloaderTerminal
                 html += $"<tr id=\"sr_{i}\">";
                 for (int j = 0; j < dt.Columns.Count; j++)
                 {
-                    html += $"<td style=\"width:inherit; padding:inherit; box-sizing:border-box; align:center;\">{dt.Rows[i][j]}</td>";
+                    html += $"<td style=\"width:inherit; padding:inherit; box-sizing:border-box; text-align:left;\">{dt.Rows[i][j]}</td>";
                 }
 
                 html += "</tr>";
