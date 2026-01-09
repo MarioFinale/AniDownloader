@@ -147,16 +147,24 @@ namespace AniDownloaderTerminal
                     // Since the user can specify the path (but not the file names) we try to check if the directory is following a Plex-style folder structure
                     // where it usually follows the '/Series Name/Season/Episode.ext' structure. We use '$' to make sure we match the end of the path.
                     // Matches 's00' 's-00' 's_00' 's.00' 'season00' 'season 00' 'season-00' 'season_00' 'season.00' '00' at the end of the path. Case insensitive.
-                    Match isSeasonMatch = Regex.Match(row.path.Trim(), @"(?:.+?)[/\\](?:[Ss](?:eason)?[ \-_\\.]*)*(\d{1,3})(?:$|[/\\]$)", RegexOptions.IgnoreCase);
+                    Match isSeasonMatchInPath = Regex.Match(row.path.Trim(), @"(?:.+?)[/\\](?:[Ss](?:eason)?[ \-_\\.]*)*(\d{1,3})(?:$|[/\\]$)", RegexOptions.IgnoreCase);
+                    Match isSeasonMatchInName = Regex.Match(row.path.Trim(), @"(?:.+?)[/\\](?:[Ss](?:eason)?[ \-_\\.]*)*(\d{1,3})(?:$|[/\\]$)", RegexOptions.IgnoreCase); //We check the name too, if it matches we clean it.
 
                     string searchName = row.name; // Series name that we will use to query anilist.
-                    if (isSeasonMatch.Success)
+                    
+                    if (isSeasonMatchInPath.Success)
                     {
-                        bool success = int.TryParse(isSeasonMatch.Groups[1].Value, out int season);
+                        if (isSeasonMatchInName.Success)
+                        {
+                            searchName = searchName.Replace(isSeasonMatchInName.Groups[1].Value, string.Empty).Trim(); // We remove the season from the name, as it will be added later.
+                        }
+
+                        bool success = int.TryParse(isSeasonMatchInPath.Groups[1].Value, out int season);
                         if (!success) continue; // Shouldn't fail since the group 1 in the regex only matches digits but we check just in case the regex is updated in the future.
                                                 // 'Series name + season {number}' should return the correct season in anilist for directories following the plex-style structure.
                         searchName = searchName.Trim() + " season " + season;
                     }
+
                     AnilistMetadataProvider.SeriesStatus? status = Global.MetadataProvider.QuerySeriesByName(searchName);
                     if (status == null) continue; // Can be null if an exception occurs inside the 'QuerySeriesByName' function or Anilist cannot find it by name. If so, we skip.
                     if (status.Episodes <= 0) continue; // No episodes yet, skip.
@@ -179,7 +187,7 @@ namespace AniDownloaderTerminal
             // Lock the table and clean finished series.
             if (rowsToDelete.Count > 0)
             {
-                Global.TaskAdmin.Logger.Log($"{rowsToDelete} series finished and with all episodes downloaded are going to be renoved from the series list.", "CleanFinishedSeries");
+                Global.TaskAdmin.Logger.Log($"{rowsToDelete.Count} series finished and with all episodes downloaded are going to be renoved from the series list.", "CleanFinishedSeries");
                 lock (Global.SeriesTable)
                 {
                     foreach ((string name, string path) row in rowsToDelete)
