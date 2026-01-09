@@ -137,7 +137,7 @@ namespace AniDownloaderTerminal
 
                             if (!paramsDic.TryGetValue(paramID, out WebTable? value))
                             {                             
-                                if (value != null) paramsDic.Add(paramID, value);
+                                if (value == null) paramsDic.Add(paramID, new WebTable());
                             }
 
                             switch (paramName)
@@ -171,9 +171,10 @@ namespace AniDownloaderTerminal
                         }
 
                     }
-                    catch (Exception)
+                    catch (Exception ex)
                     {
                         Global.TaskAdmin.Logger.EX_Log($"Error handling POST data.", "HandleIncomingConnections");
+                        Global.TaskAdmin.Logger.EX_Log($"Ex: {ex.Message}", "HandleIncomingConnections");
                     }
 
 
