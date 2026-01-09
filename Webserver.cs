@@ -176,8 +176,6 @@ namespace AniDownloaderTerminal
                         Global.TaskAdmin.Logger.EX_Log($"Error handling POST data.", "HandleIncomingConnections");
                         Global.TaskAdmin.Logger.EX_Log($"Ex: {ex.Message}", "HandleIncomingConnections");
                     }
-
-
                 }
 
                 if ((req.HttpMethod == "POST") && (req.Url != null) && (req.Url.AbsolutePath == "/settings"))

@@ -1,8 +1,10 @@
 ﻿using DataTablePrettyPrinter;
+using MonoTorrent.Client;
 using System.Collections.Concurrent;
 using System.Data;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Xml.Linq;
 using static AniDownloaderTerminal.SeriesDownloader.EpisodeToDownload;
 
 
@@ -42,8 +44,18 @@ namespace AniDownloaderTerminal
         {
             Console.Clear();
 
+            bool CleanFinishedSeriesTask()
+            {
+                CleanFinishedSeries();
+                return true;
+            }
+
+            Global.TaskAdmin.NewTask("CleanFinishedSeries", "Downloader", CleanFinishedSeriesTask, 300000, true);
+
+
             bool StartDownloadsTask()
             {
+                Thread.Sleep(5000);//Delay so it doesn't crash with CleanFinishedSeriesTask at the beggining.
                 CurrentSeriesDownloader.StartDownloads();
                 return true;
             }
@@ -94,6 +106,98 @@ namespace AniDownloaderTerminal
             await UpdateSeries();
         }
 
+        /// 
+        /// Cleans finished series from the SeriesTable by checking if the series is marked as finished on Anilist
+        /// and if the local directory contains at least as many video files as the total episodes reported.
+        /// Removes matching rows from the DataTable and persists changes to XML if any deletions occur.
+        ///
+        public void CleanFinishedSeries()
+        {
+            HashSet<(string name, string path)> seriesRows = [];
+            HashSet<(string name, string path)> rowsToDelete = [];
+            lock (Global.SeriesTable)
+            {
+                foreach (DataRow row in Global.SeriesTable.Rows)
+                {
+                    string? seriesName = row["Name"]?.ToString();
+                    string? seriesPath = row["Path"]?.ToString();
+                    if (string.IsNullOrWhiteSpace(seriesName) || string.IsNullOrWhiteSpace(seriesPath))
+                    {
+                        continue;
+                    }
+                    seriesRows.Add((seriesName, seriesPath));
+                }
+            }
+
+            foreach ((string name, string path) row in seriesRows)
+            {
+                Global.CurrentOpsQueue.Enqueue($"Checking if {row.name} is finished.");
+                try
+                {
+                    if (!Directory.Exists(row.path)) continue; // Directory cannot be accessed, skip.
+
+                    // This program stores the episode names as 'SeriesName {episode}.ext' although the path can be specified by the user. We enforce flat directories.
+                    // We use MKV as video container but there is the possibility the user manually downloaded some episodes so we should look for valid extensions specified in the settings.
+                    int fileCount = Directory.EnumerateFiles(row.path, row.name + "*.*")
+                                             .Where(f => Settings.ValidExtensions.Select(x => x.ToLowerInvariant()).ToHashSet().Contains(Path.GetExtension(f).ToLowerInvariant()))
+                                             .Count();
+
+                    if (fileCount == 0) continue; // New Series, don't bother to waste resources on querying.
+
+                    // Since the user can specify the path (but not the file names) we try to check if the directory is following a Plex-style folder structure
+                    // where it usually follows the '/Series Name/Season/Episode.ext' structure. We use '$' to make sure we match the end of the path.
+                    // Matches 's00' 's-00' 's_00' 's.00' 'season00' 'season 00' 'season-00' 'season_00' 'season.00' '00' at the end of the path. Case insensitive.
+                    Match isSeasonMatch = Regex.Match(row.path.Trim(), @"(?:.+?)[/\\](?:[Ss](?:eason)?[ \-_\\.]*)*(\d{1,3})(?:$|[/\\]$)", RegexOptions.IgnoreCase);
+
+                    string searchName = row.name; // Series name that we will use to query anilist.
+                    if (isSeasonMatch.Success)
+                    {
+                        bool success = int.TryParse(isSeasonMatch.Groups[1].Value, out int season);
+                        if (!success) continue; // Shouldn't fail since the group 1 in the regex only matches digits but we check just in case the regex is updated in the future.
+                                                // 'Series name + season {number}' should return the correct season in anilist for directories following the plex-style structure.
+                        searchName = searchName.Trim() + " season " + season;
+                    }
+                    AnilistMetadataProvider.SeriesStatus? status = Global.MetadataProvider.QuerySeriesByName(searchName);
+                    if (status == null) continue; // Can be null if an exception occurs inside the 'QuerySeriesByName' function or Anilist cannot find it by name. If so, we skip.
+                    if (status.Episodes <= 0) continue; // No episodes yet, skip.
+
+                    if (status.Finished)
+                    {
+                        if (fileCount >= status.Episodes)
+                        {
+                            rowsToDelete.Add(row);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Global.TaskAdmin.Logger.EX_Log($"Failed to process series '{row.name}' at '{row.path}'.", "CleanFinishedSeries");
+                    Global.TaskAdmin.Logger.Debug_Log(ex.Message, "CleanFinishedSeries"); // Only prints if Debug == true
+                    Global.TaskAdmin.Logger.Debug_Log(ex.StackTrace, "CleanFinishedSeries");
+                }
+            }
+            // Lock the table and clean finished series.
+            if (rowsToDelete.Count > 0)
+            {
+                lock (Global.SeriesTable)
+                {
+                    foreach ((string name, string path) row in rowsToDelete)
+                    {
+                        // Use Select for efficient lookup; escapes apostrophes in queries.
+                        var matchingRows = Global.SeriesTable.Select($"Name = '{row.name.Replace("'", "''")}' AND Path = '{row.path.Replace("'", "''")}'");
+                        foreach (var r in matchingRows)
+                        {
+                            r.Delete();
+                        }
+                    }
+                    Global.SeriesTable.AcceptChanges();
+                    Global.SeriesTable.WriteXml(Global.SeriesTableFilePath, XmlWriteMode.WriteSchema);
+                }
+            }
+            Global.CurrentOpsQueue.Enqueue($"Check for finished series Done.");
+        }
+
+
         private async Task UpdateSeries()
         {
             while (true)
@@ -114,7 +218,6 @@ namespace AniDownloaderTerminal
                             if (sName == null) { continue; }
                             if (sPath == null) { continue; }
                             if (sFilter == null) { continue; }
-                            Global.CurrentOpsQueue.Enqueue("Checking " + sName);
                             if (!Directory.Exists(sPath)) Directory.CreateDirectory(sPath);
                             Series series = new(sName, sPath, sOffset, sFilter);
                             seriesInTable.Add(series);
