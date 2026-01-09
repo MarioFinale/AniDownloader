@@ -179,6 +179,7 @@ namespace AniDownloaderTerminal
             // Lock the table and clean finished series.
             if (rowsToDelete.Count > 0)
             {
+                Global.TaskAdmin.Logger.Log($"{rowsToDelete} series finished and with all episodes downloaded are going to be renoved from the series list.", "CleanFinishedSeries");
                 lock (Global.SeriesTable)
                 {
                     foreach ((string name, string path) row in rowsToDelete)
@@ -193,6 +194,10 @@ namespace AniDownloaderTerminal
                     Global.SeriesTable.AcceptChanges();
                     Global.SeriesTable.WriteXml(Global.SeriesTableFilePath, XmlWriteMode.WriteSchema);
                 }
+                foreach (string name in rowsToDelete.Select(x=> x.name))
+                {
+                    Global.TaskAdmin.Logger.Log($"Removed '{name}' from the SeriesList.", "CleanFinishedSeries");
+                }              
             }
             Global.CurrentOpsQueue.Enqueue($"Check for finished series Done.");
         }

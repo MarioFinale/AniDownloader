@@ -98,10 +98,18 @@ namespace AniDownloaderTerminal
         private SeriesStatus? QuerySeriesByNameFromApi(string seriesName)
         {
             Global.CurrentOpsQueue.Enqueue($"Queryng Anilist API for '{seriesName}'.");
-            string query = "{ \"query\": \"query ($search: String) { Media(search: $search, type: ANIME) { id episodes status } }\", \"variables\": { \"search\": \"" + seriesName + "\" } }";
-            HttpContent content = new StringContent(query, Encoding.UTF8, "application/json");
+            var graphqlQuery = new
+            {
+                query = "query ($search: String) { Media(search: $search, type: ANIME) { id episodes status } }",
+                variables = new { search = seriesName }
+            };
+            string jsonPayload = JsonSerializer.Serialize(graphqlQuery);
+            HttpContent content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
             string response = Global.PostWebStringToUrlNonAsync(APIEndpointURI, content);
-            if (string.IsNullOrWhiteSpace(response)) return null;
+            if (string.IsNullOrWhiteSpace(response)) {
+                Global.TaskAdmin.Logger.EX_Log($"Failed to query '{seriesName}' by name (empty response)", "QuerySeriesByNameFromApi");
+                return null;
+            } 
 
             using JsonDocument document = JsonDocument.Parse(response);
             if (!document.RootElement.TryGetProperty("data", out JsonElement data) ||

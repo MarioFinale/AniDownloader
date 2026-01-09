@@ -1,6 +1,8 @@
 ﻿using System.Collections.Concurrent;
 using System.Data;
 using System.Globalization;
+using System.Net;
+using System.Net.Sockets;
 using System.Text.RegularExpressions;
 namespace AniDownloaderTerminal
 {
@@ -15,14 +17,20 @@ namespace AniDownloaderTerminal
         public static readonly DataTable SeriesTable = new("Series");
         public static readonly DataTable CurrentStatusTable = new("Torrent Status");
         private static DateTime LastRequestTime;
-        private static readonly HttpClient httpClient = new()
-        {
-            Timeout = TimeSpan.FromSeconds(60)
-        };
+
+        private static readonly HttpClient httpClient = CreateHttpClient();
+
 
         public static readonly TaskAdmin.Utility.TaskAdmin TaskAdmin = new();
         public static readonly ConcurrentQueue<string> CurrentOpsQueue = new();
         public static AnilistMetadataProvider MetadataProvider = new();
+
+        private static HttpClient CreateHttpClient()
+        {
+            HttpClient client = (new HttpClient { Timeout = TimeSpan.FromSeconds(60) });
+            client.DefaultRequestHeaders.Add(HttpRequestHeader.UserAgent.ToString(), "Anidownloader/1.2.0" );
+            return client;
+        }
 
         private static async Task DelayAsync()
         {
@@ -36,6 +44,7 @@ namespace AniDownloaderTerminal
         }
         private static async Task<T?> PerformHttpGetOperationAsync<T>(Func<HttpResponseMessage, Task<T>> operation, string url)
         {
+            
             CurrentOpsQueue.Enqueue($"Loading: {url}");
             try
             {

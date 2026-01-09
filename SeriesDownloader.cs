@@ -285,7 +285,11 @@ namespace AniDownloaderTerminal
                     }
                     if (episode.TorrentManager != null)
                     {
-                        double ratio = episode.TorrentManager.Monitor.DataBytesUploaded / episode.TorrentManager.Monitor.DataBytesDownloaded;
+                        double ratio = 0;
+                        if (episode.TorrentManager.Monitor.DataBytesDownloaded > 0)
+                        {
+                            ratio = episode.TorrentManager.Monitor.DataBytesUploaded / episode.TorrentManager.Monitor.DataBytesDownloaded;
+                        }
 
                         if (Settings.UseRatio)
                         {
