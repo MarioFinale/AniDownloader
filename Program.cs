@@ -148,7 +148,7 @@ namespace AniDownloaderTerminal
                     // where it usually follows the '/Series Name/Season/Episode.ext' structure. We use '$' to make sure we match the end of the path.
                     // Matches 's00' 's-00' 's_00' 's.00' 'season00' 'season 00' 'season-00' 'season_00' 'season.00' '00' at the end of the path. Case insensitive.
                     Match isSeasonMatchInPath = Regex.Match(row.path.Trim(), @"(?:.+?)[/\\](?:[Ss](?:eason)?[ \-_\\.]*)*(\d{1,3})(?:$|[/\\]$)", RegexOptions.IgnoreCase);
-                    Match isSeasonMatchInName = Regex.Match(row.path.Trim(), @"(?:.+?)[/\\](?:[Ss](?:eason)?[ \-_\\.]*)*(\d{1,3})(?:$|[/\\]$)", RegexOptions.IgnoreCase); //We check the name too, if it matches we clean it.
+                    Match isSeasonMatchInName = Regex.Match(row.name.Trim(), @"(?:(?:s|season)[ .\-_]*| )(\d{1,3})(?:nd season$|$)", RegexOptions.IgnoreCase); //We check the name too, if it matches we clean it.
 
                     string searchName = row.name; // Series name that we will use to query anilist.
                     
@@ -156,7 +156,8 @@ namespace AniDownloaderTerminal
                     {
                         if (isSeasonMatchInName.Success)
                         {
-                            searchName = searchName.Replace(isSeasonMatchInName.Groups[1].Value, string.Empty).Trim(); // We remove the season from the name, as it will be added later.
+                            searchName = searchName.Replace(isSeasonMatchInName.Value, string.Empty).Trim(); // We remove the season from the name, as it will be added later.
+                            searchName = Regex.Replace(searchName, "[ -\\._]+$", "");
                         }
 
                         bool success = int.TryParse(isSeasonMatchInPath.Groups[1].Value, out int season);
@@ -217,7 +218,6 @@ namespace AniDownloaderTerminal
             {
                 try
                 {
-
                     List<Series> seriesInTable = [];
                     lock (Global.SeriesTable)
                     {
