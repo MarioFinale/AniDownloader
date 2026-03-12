@@ -28,7 +28,7 @@ namespace AniDownloaderTerminal
         private static HttpClient CreateHttpClient()
         {
             HttpClient client = (new HttpClient { Timeout = TimeSpan.FromSeconds(60) });
-            client.DefaultRequestHeaders.Add(HttpRequestHeader.UserAgent.ToString(), "Anidownloader/1.2.0" );
+            client.DefaultRequestHeaders.Add(HttpRequestHeader.UserAgent.ToString(), "Anidownloader/1.2.1" );
             return client;
         }
 

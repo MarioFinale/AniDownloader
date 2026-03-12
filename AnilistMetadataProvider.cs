@@ -1,11 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Data;
-using System.Linq;
+﻿using Microsoft.Data.Sqlite;
+using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
-using Microsoft.Data.Sqlite;
 
 namespace AniDownloaderTerminal
 {
@@ -13,19 +9,22 @@ namespace AniDownloaderTerminal
     {
         private readonly string APIEndpointURI;
         private readonly string DbPath;
-
+        private SqliteConnection _connection;
         public AnilistMetadataProvider()
         {
             APIEndpointURI = Settings.AnilistEndPointUri;
             DbPath = Global.MetadataDBPath;
+
+            _connection = GetDbConnection();
+            _connection.Open();
+
             InitializeDatabase();
+
         }
 
         private void InitializeDatabase()
         {
-            using var conn = GetDbConnection();
-            conn.Open();
-            using var cmd = conn.CreateCommand();
+            using SqliteCommand cmd = _connection.CreateCommand();
             cmd.CommandText = @"
                 CREATE TABLE IF NOT EXISTS SeriesMetadata (
                     Name TEXT PRIMARY KEY,
@@ -39,13 +38,15 @@ namespace AniDownloaderTerminal
 
         private SqliteConnection GetDbConnection()
         {
-            return new SqliteConnection($"Data Source={DbPath};");
+            _connection ??= new SqliteConnection($"Data Source={DbPath};Pooling=True;");
+            return _connection;
         }
 
         public SeriesStatus? QuerySeriesByName(string seriesName)
         {
             Global.CurrentOpsQueue.Enqueue($"Queryng db for '{seriesName}'.");
             if (string.IsNullOrWhiteSpace(seriesName)) return null;
+
             SeriesStatus? status = QuerySeriesByNameFromCache(seriesName);
             if (status == null)
             {
@@ -60,39 +61,41 @@ namespace AniDownloaderTerminal
 
         private SeriesStatus? QuerySeriesByNameFromCache(string seriesName)
         {
-            using var conn = GetDbConnection();
-            conn.Open();
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = "SELECT Id, Episodes, Finished, Timestamp FROM SeriesMetadata WHERE Name = @Name";
-            cmd.Parameters.AddWithValue("@Name", seriesName);
-            using var reader = cmd.ExecuteReader();
-            if (reader.Read())
+            lock (_connection)
             {
-                DateTime timestamp = reader.GetDateTime(3);
-                if (DateTime.UtcNow - timestamp > TimeSpan.FromDays(7))
+                using SqliteCommand cmd = GetDbConnection().CreateCommand();
+                cmd.CommandText = "SELECT Id, Episodes, Finished, Timestamp FROM SeriesMetadata WHERE Name = @Name";
+                cmd.Parameters.AddWithValue("@Name", seriesName);
+                using SqliteDataReader reader = cmd.ExecuteReader();
+                if (reader.Read())
                 {
-                    // Cache too old; delete and return null to refetch
-                    DeleteCacheEntry(seriesName);
-                    return null;
+                    DateTime timestamp = reader.GetDateTime(3);
+                    if (DateTime.UtcNow - timestamp > TimeSpan.FromDays(7))
+                    {
+                        // Cache too old; delete and return null to refetch
+                        DeleteCacheEntry(seriesName);
+                        return null;
+                    }
+                    return new SeriesStatus
+                    {
+                        Id = reader.GetInt64(0),
+                        Episodes = reader.IsDBNull(1) ? 0 : reader.GetInt32(1), // Handle null episodes (ongoing series)
+                        Finished = reader.GetInt32(2) == 1
+                    };
                 }
-                return new SeriesStatus
-                {
-                    Id = reader.GetInt64(0),
-                    Episodes = reader.IsDBNull(1) ? 0 : reader.GetInt32(1), // Handle null episodes (ongoing series)
-                    Finished = reader.GetInt32(2) == 1
-                };
+                return null;
             }
-            return null;
         }
 
         private void DeleteCacheEntry(string seriesName)
         {
-            using var conn = GetDbConnection();
-            conn.Open();
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = "DELETE FROM SeriesMetadata WHERE Name = @Name";
-            cmd.Parameters.AddWithValue("@Name", seriesName);
-            cmd.ExecuteNonQuery();
+            lock (_connection)
+            {
+                using SqliteCommand cmd = GetDbConnection().CreateCommand();
+                cmd.CommandText = "DELETE FROM SeriesMetadata WHERE Name = @Name";
+                cmd.Parameters.AddWithValue("@Name", seriesName);
+                cmd.ExecuteNonQuery();
+            }           
         }
 
         private SeriesStatus? QuerySeriesByNameFromApi(string seriesName)
@@ -137,18 +140,19 @@ namespace AniDownloaderTerminal
 
         private void CacheSeriesStatus(string seriesName, SeriesStatus status)
         {
-            using var conn = GetDbConnection();
-            conn.Open();
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = @"
+            lock (_connection)
+            {
+                using SqliteCommand cmd = GetDbConnection().CreateCommand();
+                cmd.CommandText = @"
                 INSERT OR REPLACE INTO SeriesMetadata (Name, Id, Episodes, Finished, Timestamp)
                 VALUES (@Name, @Id, @Episodes, @Finished, @Timestamp)";
-            cmd.Parameters.AddWithValue("@Name", seriesName);
-            cmd.Parameters.AddWithValue("@Id", status.Id);
-            cmd.Parameters.AddWithValue("@Episodes", status.Episodes == 0 ? DBNull.Value : status.Episodes); // Allow null for ongoing
-            cmd.Parameters.AddWithValue("@Finished", status.Finished ? 1 : 0);
-            cmd.Parameters.AddWithValue("@Timestamp", DateTime.UtcNow); // Use UTC
-            cmd.ExecuteNonQuery();
+                cmd.Parameters.AddWithValue("@Name", seriesName);
+                cmd.Parameters.AddWithValue("@Id", status.Id);
+                cmd.Parameters.AddWithValue("@Episodes", status.Episodes == 0 ? DBNull.Value : status.Episodes); // Allow null for ongoing
+                cmd.Parameters.AddWithValue("@Finished", status.Finished ? 1 : 0);
+                cmd.Parameters.AddWithValue("@Timestamp", DateTime.UtcNow); // Use UTC
+                cmd.ExecuteNonQuery();
+            }           
         }
 
         public class SeriesStatus
