@@ -248,7 +248,11 @@ namespace AniDownloaderTerminal
 
                     if (sortedFiles.Count == 0) continue;
 
-                    ConvertFile(episode, sortedFiles[0]);
+                    if (!ConvertFile(episode, sortedFiles[0]))
+                    {
+                        Global.TaskAdmin.Logger.EX_Log($"ConvertFile returned False for: {episode.Name}. File: {sortedFiles[0]}", "StartConversions");
+                        continue;
+                    }
 
                     lock (episode)
                     {
@@ -391,6 +395,7 @@ namespace AniDownloaderTerminal
                 if (withBlock.ExitCode != 0)
                 {
                     Global.TaskAdmin.Logger.EX_Log("Exit code '" + withBlock.ExitCode + "' on ffmpeg for '" + finalEpisodeName + "'. Conversion failed.", "ConvertFile");
+                    Global.TaskAdmin.Logger.EX_Log($"Full command line: ffmpeg {args}", "ConvertFile");
                     try
                     {
                         if (File.Exists(finalEpisodeName)) File.Delete(finalEpisodeName);

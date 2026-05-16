@@ -211,6 +211,12 @@ namespace AniDownloaderTerminal
             Global.CurrentOpsQueue.Enqueue($"Check for finished series Done.");
         }
 
+        private static bool IsSeasonFolder(string folderName)
+        {
+            // Matches common Plex-style season folders: S01, Season 1, s.01, season_02, 1, etc.
+            // (Simplified version of the regex already used in CleanFinishedSeries)
+            return Regex.IsMatch(folderName.Trim(), @"^(?:[Ss](?:eason)?[ \-_\\.]*)*\d{1,3}$", RegexOptions.IgnoreCase);
+        }
 
         private async Task UpdateSeries()
         {
@@ -276,6 +282,8 @@ namespace AniDownloaderTerminal
         {
             // Use HashSet to avoid duplicate series if paths overlap between table and search subdirs
             HashSet<(string name, string path)> seriesRows = [];
+
+            // Load existing entries from Global.SeriesTable (unchanged)
             lock (Global.SeriesTable)
             {
                 foreach (DataRow row in Global.SeriesTable.Rows)
@@ -289,30 +297,49 @@ namespace AniDownloaderTerminal
                     seriesRows.Add((seriesName, seriesPath));
                 }
             }
-            foreach (String path in Settings.SearchPaths)
+
+            // Discover from SearchPaths
+            foreach (string searchPath in Settings.SearchPaths)
             {
-                foreach (String subDir in Directory.EnumerateDirectories(path))
+                if (!Directory.Exists(searchPath)) continue;
+
+                foreach (string potentialSeriesDir in Directory.EnumerateDirectories(searchPath))
                 {
-                    if (String.IsNullOrWhiteSpace(subDir)) continue;
-                    if (!Directory.Exists(subDir)) continue;
-                    string seriesName = new DirectoryInfo(subDir).Name;
-                    string? seriesPath = Path.GetFullPath(subDir);
-                    if (seriesName == null || seriesPath == null) continue;
-                    seriesRows.Add((seriesName, seriesPath));
+                    if (!Directory.Exists(potentialSeriesDir)) continue;
+
+                    string basePath = Path.GetFullPath(potentialSeriesDir);
+                    string baseName = new DirectoryInfo(potentialSeriesDir).Name;
+
+                    // Always add the top-level series folder (flat structure support)
+                    seriesRows.Add((baseName, basePath));
+
+                    // NEW: Look one level deeper for season subfolders (S01, Season 02, etc.)
+                    foreach (string seasonDir in Directory.EnumerateDirectories(basePath))
+                    {
+                        string seasonFolderName = new DirectoryInfo(seasonDir).Name;
+                        if (IsSeasonFolder(seasonFolderName))
+                        {
+                            string fullSeasonPath = Path.GetFullPath(seasonDir);
+                            // This is the key change you asked for: "Series/S01/" → name = "Series S01"
+                            string seriesNameWithSeason = baseName.Trim() + " " + seasonFolderName;
+                            seriesRows.Add((seriesNameWithSeason, fullSeasonPath));
+                        }
+                    }
                 }
             }
+
+            // Process every discovered series (including seasons)
             foreach ((string name, string path) row in seriesRows)
             {
-                string seriesName = row.name;
-                string seriesPath = row.path;
-                Global.CurrentOpsQueue.Enqueue($"Searching unconverted files and marked series for {seriesName}");
-                if (!Directory.Exists(seriesPath))
+                Global.CurrentOpsQueue.Enqueue($"Searching unconverted files and marked series for {row.name}");
+                if (!Directory.Exists(row.path))
                 {
                     continue;
                 }
-                SearchAndProcessDirectoryMarker(seriesName, seriesPath);
-                SearchAndProcessUncompleted(seriesPath);
+                SearchAndProcessDirectoryMarker(row.name, row.path);
+                SearchAndProcessUncompleted(row.path);
             }
+
             UpdateSeriesDataTable();
             Global.CurrentOpsQueue.Enqueue("Search for unconverted files and marked series done.");
         }
