@@ -368,7 +368,7 @@ namespace AniDownloaderTerminal
                 foreach (string file in videoFiles)
                 {
                     string episodeName = Path.GetFileNameWithoutExtension(file).Trim();
-                    int? episodeNumber = OnlineEpisodeElement.GetEpNumberFromString(episodeName); //Method catches exceptions, always returns a number of null.
+                    int? episodeNumber = OnlineEpisodeElement.GetEpNumberFromString(episodeName); //Method catches exceptions, always returns a number or null.
                     if (episodeNumber == null)
                     {
                         Global.TaskAdmin.Logger.Log($"Skipped '{file}'. No episode number found.", "SearchAndProcessDirectoryMarker");
@@ -382,7 +382,7 @@ namespace AniDownloaderTerminal
                     }
                     string destEpisodeExtension = Path.GetExtension(file).ToLowerInvariant();
                     string destEpisodeName = seriesName + " " + epNumberString;
-                    string tempFolder = Path.Combine(seriesPath, destEpisodeName) + ".temp"; //Temp folder is per-episode, not per series. When episode processing is complete the folder is deleted.
+                    string tempFolder = Path.Combine(seriesPath, destEpisodeName) + ".temp"; //Temp folder is per-episode, not per series. When episode processing is completed the folder is deleted.
                     string destEpisodePath = Path.Combine(tempFolder, destEpisodeName + destEpisodeExtension);
                     try
                     {
@@ -424,6 +424,7 @@ namespace AniDownloaderTerminal
             catch (Exception ex)
             {
                 Global.TaskAdmin.Logger.EX_Log($"Error processing '{seriesPath}': {ex.Message}", "SearchAndProcessDirectoryMarker");
+                Global.TaskAdmin.Logger.EX_Log($"Stack trace: {ex.StackTrace}", "SearchAndProcessDirectoryMarker");
             }
         }
 

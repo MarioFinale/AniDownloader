@@ -131,7 +131,10 @@ namespace AniDownloaderTerminal
         public static int? GetEpNumberFromString(String str)
         {
             var epMatch = EpisodeNumberRegex().Match(str);
-            if (epMatch.Success) return int.Parse(epMatch.Groups[1].Success ? epMatch.Groups[1].Value : epMatch.Groups[2].Value);
+            if (!epMatch.Success) return null;
+            if (epMatch.Groups[1].Success) return int.Parse(epMatch.Groups[1].Value);
+            if (epMatch.Groups[2].Success) return int.Parse(epMatch.Groups[2].Value);
+            if (epMatch.Groups[3].Success) return int.Parse(epMatch.Groups[3].Value);
             return null;
         }
 
