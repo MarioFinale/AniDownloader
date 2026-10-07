@@ -2,6 +2,7 @@
 using MonoTorrent.Client;
 using System.Collections.Concurrent;
 using System.Data;
+using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
@@ -19,14 +20,31 @@ namespace AniDownloaderTerminal
         private int PreviousWindowHeight = 0;
         private int PreviousWindowWidth = 0;
 
+        // Cached remote worker claims so the 200ms UI refresh does not walk the
+        // filesystem every tick. Refreshed at most every WorkerClaimRefreshMs.
+        private List<EncodingClaim> _cachedRemoteClaims = [];
+        private DateTime _lastRemoteClaimScanUtc = DateTime.MinValue;
+        private readonly object _remoteClaimsLock = new();
+
         public static readonly Settings settings = new();
         public static readonly Webserver webserver = new();
 
         [GeneratedRegex(@"\d{1,3}$")]
         private static partial Regex TempFolderEpisodeNumberRegex();
 
-        public static void Main()
+        public static void Main(string[] args)
         {
+            // Remote encoder mode: dotnet run -- --worker
+            // (or pass -worker / worker). Uses the same settings + media paths;
+            // coordinates via worker.claim files inside each episode .temp folder.
+            if (args.Any(a => string.Equals(a, "--worker", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(a, "-worker", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(a, "worker", StringComparison.OrdinalIgnoreCase)))
+            {
+                EncoderWorker.Run();
+                return;
+            }
+
             settings.Init();
             Program program = new();
             webserver.Init();            
@@ -302,6 +320,8 @@ namespace AniDownloaderTerminal
             foreach (string searchPath in Settings.SearchPaths)
             {
                 if (!Directory.Exists(searchPath)) continue;
+                if (File.Exists(Path.Combine(searchPath, ".ADIngnore"))) continue;
+
 
                 foreach (string potentialSeriesDir in Directory.EnumerateDirectories(searchPath))
                 {
@@ -320,7 +340,6 @@ namespace AniDownloaderTerminal
                         if (IsSeasonFolder(seasonFolderName))
                         {
                             string fullSeasonPath = Path.GetFullPath(seasonDir);
-                            // This is the key change you asked for: "Series/S01/" → name = "Series S01"
                             string seriesNameWithSeason = baseName.Trim() + " " + seasonFolderName;
                             seriesRows.Add((seriesNameWithSeason, fullSeasonPath));
                         }
@@ -337,6 +356,7 @@ namespace AniDownloaderTerminal
                     continue;
                 }
                 SearchAndProcessDirectoryMarker(row.name, row.path);
+                SearchAndProcessNonH264Videos(row.name, row.path);
                 SearchAndProcessUncompleted(row.path);
             }
 
@@ -456,6 +476,120 @@ namespace AniDownloaderTerminal
         }
 
         /// <summary>
+        /// Scans a series directory for video files that are not H.264 (or that cannot be probed)
+        /// and queues them for conversion using the same rename-to-canonical-name logic as the
+        /// .needsconvert marker routine. This keeps final filenames consistent with the rest of
+        /// the downloader (SeriesName 01.ext, SeriesName 02.ext, ...).
+        /// Files already inside a .temp folder or already tracked are skipped.
+        /// </summary>
+        public void SearchAndProcessNonH264Videos(string seriesName, string seriesPath)
+        {
+            if (string.IsNullOrWhiteSpace(seriesName) || !Directory.Exists(seriesPath))
+                return;
+
+            try
+            {
+                // Only top-level files (same as the marker path). .temp folders are handled separately.
+                string[] videoFiles = [.. Settings.ValidExtensions
+                    .SelectMany(extension => Directory.EnumerateFiles(seriesPath, "*" + extension))];
+
+                if (videoFiles.Length == 0)
+                    return;
+
+                int queuedCount = 0;
+                foreach (string file in videoFiles)
+                {
+                    // Skip anything that is already being tracked or that lives under a temp dir
+                    string episodeNameCandidate = Path.GetFileNameWithoutExtension(file).Trim();
+                    if (CurrentSeriesDownloader.Episodes.ContainsKey(episodeNameCandidate))
+                        continue;
+
+                    // Fast path: a valid .h264ok marker means we already probed this exact
+                    // file (same size + mtime) and confirmed it is H.264. Skip the expensive
+                    // ffprobe call on every 5-minute scan cycle.
+                    if (SeriesDownloader.IsFileVerifiedH264(file))
+                        continue;
+
+                    // Probe codec – only process when it is NOT h264 (or probe failed).
+                    // On first successful confirmation we write the marker so later cycles
+                    // can take the fast path above.
+                    if (SeriesDownloader.IsH264Video(file))
+                    {
+                        SeriesDownloader.MarkFileAsVerifiedH264(file);
+                        continue;
+                    }
+
+                    int? episodeNumber = OnlineEpisodeElement.GetEpNumberFromString(episodeNameCandidate);
+                    if (episodeNumber == null)
+                    {
+                        Global.TaskAdmin.Logger.Log($"Skipped non-H264 '{file}'. No episode number found.", "SearchAndProcessNonH264Videos");
+                        continue;
+                    }
+
+                    // Same naming convention used by the .needsconvert path so the rest of the
+                    // pipeline (final file name, GetEpisodesDownloaded regex, Plex, etc.) stays consistent.
+                    string epNumberString = String.Format("{0:00}", episodeNumber);
+                    if (videoFiles.Length > 99)
+                    {
+                        epNumberString = String.Format("{0:000}", episodeNumber);
+                    }
+                    string destEpisodeExtension = Path.GetExtension(file).ToLowerInvariant();
+                    string destEpisodeName = seriesName + " " + epNumberString;
+                    string tempFolder = Path.Combine(seriesPath, destEpisodeName) + ".temp";
+                    string destEpisodePath = Path.Combine(tempFolder, destEpisodeName + destEpisodeExtension);
+
+                    // If a final file with the canonical name already exists and is itself H.264 we
+                    // leave the original alone; otherwise we still move & re-encode.
+                    string possibleFinal = Path.Combine(seriesPath, destEpisodeName + destEpisodeExtension);
+                    if (File.Exists(possibleFinal))
+                    {
+                        if (SeriesDownloader.IsFileVerifiedH264(possibleFinal) || SeriesDownloader.IsH264Video(possibleFinal))
+                        {
+                            if (!SeriesDownloader.IsFileVerifiedH264(possibleFinal))
+                                SeriesDownloader.MarkFileAsVerifiedH264(possibleFinal);
+                            // There is already a good final file; skip this source to avoid unnecessary work.
+                            continue;
+                        }
+                    }
+
+                    try
+                    {
+                        if (Directory.Exists(tempFolder))
+                        {
+                            Directory.Delete(tempFolder, true);
+                            Global.TaskAdmin.Logger.Log($"Pre-existent temporary folder '{tempFolder}' was deleted.", "SearchAndProcessNonH264Videos");
+                        }
+                        Directory.CreateDirectory(tempFolder);
+                    }
+                    catch (Exception ex)
+                    {
+                        Global.TaskAdmin.Logger.EX_Log($"Failed to prepare temp dir '{tempFolder}'. Exception: {ex.Message}", "SearchAndProcessNonH264Videos");
+                        continue;
+                    }
+
+                    if (!MoveFileWithRetries(file, destEpisodePath, 3))
+                    {
+                        Global.TaskAdmin.Logger.Log($"Skipped non-H264 '{file}'. Failed to move to temp folder.", "SearchAndProcessNonH264Videos");
+                        continue;
+                    }
+
+                    AddEpisode(destEpisodeName, seriesPath, (int)episodeNumber, State.DownloadedFound, "Downloaded-Found (non-H264)");
+                    queuedCount++;
+                }
+
+                if (queuedCount > 0)
+                {
+                    Global.TaskAdmin.Logger.Log($"Queued {queuedCount} non-H264 file(s) in '{seriesPath}' for Series '{seriesName}'.", "SearchAndProcessNonH264Videos");
+                }
+            }
+            catch (Exception ex)
+            {
+                Global.TaskAdmin.Logger.EX_Log($"Error processing non-H264 videos in '{seriesPath}': {ex.Message}", "SearchAndProcessNonH264Videos");
+                Global.TaskAdmin.Logger.Debug_Log(ex.StackTrace, "SearchAndProcessNonH264Videos");
+            }
+        }
+
+        /// <summary>
         /// Scans a series directory for temporary (.temp) episode folders and adds uncompleted episodes to the downloader
         /// based on their state files, skipping those already in the episodes dictionary.
         /// </summary>
@@ -535,31 +669,10 @@ namespace AniDownloaderTerminal
 
         private void AddEpisode(string episodeName, string seriesPath, int episodeNumber, State state, string status)
         {
-            // Clean up existing file if necessary
-            string episodePath = Path.Combine(seriesPath, episodeName);
-            string mkvFile = episodePath + ".mkv";
-            string mp4File = episodePath + ".mp4";
-            if (File.Exists(mkvFile))
-            {
-                if (!DeleteFileWithRetries(mkvFile, 3)) {
-                    Global.TaskAdmin.Logger.EX_Log($"Could not Add '{episodeName}' because another file already exists and could not be deleted. ", "AddEpisode");
-                    return;
-                }
-                
-            }
-            if (File.Exists(mp4File))
-            {
-                if (!DeleteFileWithRetries(mp4File, 3))
-                {
-                    Global.TaskAdmin.Logger.EX_Log($"Could not Add '{episodeName}' because another file already exists and could not be deleted. ", "AddEpisode");
-                    return;
-                }
-            }
-
             var episode = new SeriesDownloader.EpisodeToDownload("", episodeName, seriesPath, episodeNumber);
             episode.SetState(state);
             episode.StatusDescription = status;
-            CurrentSeriesDownloader.AddFoundEpisodeToDictionary(episode); //AddFoundEpisodeToDictionary has lock for Episodes dictionary inside.
+            CurrentSeriesDownloader.AddFoundEpisodeToDictionary(episode);
         }
 
         private static OnlineEpisodeElement[] FilterFoundEpisodes(OnlineEpisodeElement[] episodes, Series series)
@@ -641,6 +754,40 @@ namespace AniDownloaderTerminal
             }
         }
 
+        /// <summary>
+        /// Re-reads worker.claim files from disk at most every WorkerClaimRefreshMs.
+        /// Results are cached for the frequent 200ms status-table rebuild.
+        /// </summary>
+        private void RefreshRemoteClaimsCacheIfDue()
+        {
+            int refreshMs = Math.Max(500, Settings.WorkerClaimRefreshMs);
+            if ((DateTime.UtcNow - _lastRemoteClaimScanUtc).TotalMilliseconds < refreshMs)
+                return;
+
+            List<string> seriesPaths = [];
+            lock (Global.SeriesTable)
+            {
+                foreach (DataRow row in Global.SeriesTable.Rows)
+                {
+                    string? path = row["Path"]?.ToString();
+                    if (!string.IsNullOrWhiteSpace(path))
+                        seriesPaths.Add(path);
+                }
+            }
+            foreach (string searchPath in Settings.SearchPaths)
+            {
+                if (!string.IsNullOrWhiteSpace(searchPath) && Directory.Exists(searchPath))
+                    seriesPaths.Add(searchPath);
+            }
+
+            List<EncodingClaim> fresh = EncodingClaim.FindActiveRemoteClaims(seriesPaths.Distinct());
+            lock (_remoteClaimsLock)
+            {
+                _cachedRemoteClaims = fresh;
+                _lastRemoteClaimScanUtc = DateTime.UtcNow;
+            }
+        }
+
         private void UpdateSeriesDataTable()
         {
             List<string> episodes = [];
@@ -653,7 +800,50 @@ namespace AniDownloaderTerminal
                     SetUpdateEpisodesStatusTable(episode);
                     episodes.Add(episode.Name);
                 }
-            }            
+            }
+
+            // Merge remote worker progress. The status table is rebuilt every 200ms for a
+            // responsive console, but the filesystem scan of worker.claim files is
+            // throttled (WorkerClaimRefreshMs, default 2s) so we do not walk every
+            // series directory on each tick.
+            RefreshRemoteClaimsCacheIfDue();
+
+            List<EncodingClaim> remoteClaims;
+            lock (_remoteClaimsLock)
+            {
+                remoteClaims = [.. _cachedRemoteClaims];
+            }
+
+            foreach (EncodingClaim claim in remoteClaims)
+            {
+                string episodeName = string.IsNullOrWhiteSpace(claim.EpisodeName)
+                    ? claim.Source
+                    : claim.EpisodeName;
+                if (string.IsNullOrWhiteSpace(episodeName))
+                    continue;
+                if (episodes.Contains(episodeName))
+                    continue; // already tracked locally
+
+                string status = $"Remote [{claim.WorkerId}] {claim.Status}";
+                string progress = claim.Progress.ToString("0.##");
+                lock (Global.CurrentStatusTable)
+                {
+                    DataRow? existing = Global.CurrentStatusTable.AsEnumerable()
+                        .FirstOrDefault(dr => dr.Field<string>("Episode") == episodeName);
+                    if (existing != null)
+                    {
+                        existing[0] = claim.WorkerId;
+                        existing[1] = episodeName;
+                        existing[2] = status;
+                        existing[3] = progress;
+                    }
+                    else
+                    {
+                        Global.CurrentStatusTable.Rows.Add(claim.WorkerId, episodeName, status, progress);
+                    }
+                }
+                episodes.Add(episodeName);
+            }
             
             lock (Global.CurrentStatusTable)
             {
@@ -676,6 +866,81 @@ namespace AniDownloaderTerminal
                 
             }
 
+            OverrideStatusTableWithWorkersData();
+
+            string html = Webserver.ConvertStatusDataTableToHTML(Global.CurrentStatusTable);
+            if (!string.IsNullOrEmpty(html)) Global.PublishStatusHtmlSnapshot(html);
+
+        }
+
+        private static void OverrideStatusTableWithWorkersData()
+        {
+            List<string> workerFiles = [];
+            foreach (string dir in Settings.SearchPaths)
+            {
+                if (!Directory.Exists(dir)) continue;
+                try
+                {
+                    foreach (string workerFile in Directory.GetFiles(dir, "*.worker"))
+                        workerFiles.Add(workerFile);
+                }
+                catch { /* ignore inaccessible paths */ }
+            }
+
+            foreach (string workerFile in workerFiles)
+            {
+                try
+                {
+                    string[] content = File.ReadAllLines(workerFile);
+                    if (content.Length < 4) continue;
+
+                    string workerID = content[0];
+                    string tempFolder = content[1];
+                    if (!double.TryParse(content[2], NumberStyles.Float, CultureInfo.InvariantCulture, out double progress))
+                        continue;
+                    string status = content[3];
+
+                    // Leftover *.worker files used to keep "Encoding" on the series list after
+                    // the claim was released. Only a fresh claim without a finished state counts.
+                    if (!EncodingClaim.IsWorkerProgressCurrent(tempFolder))
+                    {
+                        EncodingClaim.ClearWorkerProgressFiles(tempFolder);
+                        continue;
+                    }
+
+                    // Platform-agnostic last path component (handles \ and /)
+                    string normalized = tempFolder.Replace('\\', '/').TrimEnd('/');
+                    string episodeName = normalized.Contains('/')
+                        ? normalized[(normalized.LastIndexOf('/') + 1)..]
+                        : normalized;
+
+                    if (episodeName.EndsWith(".temp", StringComparison.OrdinalIgnoreCase))
+                        episodeName = episodeName[..^5];
+
+                    if (string.IsNullOrWhiteSpace(episodeName)) continue;
+
+                    lock (Global.CurrentStatusTable)
+                    {
+                        foreach (DataRow row in Global.CurrentStatusTable.AsEnumerable())
+                        {
+                            if (row == null) continue;
+                            string? value = row.Field<string>("Episode");
+                            if (value == null) continue;
+
+                            if (string.Equals(value.Trim(), episodeName.Trim(), StringComparison.OrdinalIgnoreCase))
+                            {
+                                row.SetField("Status", $"Remote [{workerID}] {status}");
+                                row.SetField("Progress", progress);
+                            }
+                        }
+                        Global.CurrentStatusTable.DefaultView.Sort = "Progress DESC";
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Global.TaskAdmin.Logger.Debug_Log($"OverrideStatusTableWithWorkersData failed for '{workerFile}': {ex.Message}", "Program");
+                }
+            }
         }
 
         private void PrintUpdateTable()
@@ -855,7 +1120,10 @@ namespace AniDownloaderTerminal
                 Global.CurrentStatusTable.Columns[2].SetWidth(30);
                 Global.CurrentStatusTable.Columns[3].SetWidth(10);
             }
+            string html = Webserver.ConvertStatusDataTableToHTML(Global.CurrentStatusTable);
+            if (!string.IsNullOrEmpty(html)) Global.PublishStatusHtmlSnapshot(html);
         }
     }
 }
+
 

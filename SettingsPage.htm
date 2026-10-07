@@ -1,336 +1,776 @@
-﻿<!DOCTYPE html>
-<html>
-    <head>
-        <meta charset="utf-8">
-        <title>Anidownloader Settings</title>
-        <link rel="icon" type="image/x-icon" href="/favicon.ico">
-        <link rel="stylesheet" href="style.css">
-    </head>
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AniDownloader Settings</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* Modern enhancements + theme support */
+        :root, [data-theme="light"] {
+            --primary: #f44336;
+            --primary-dark: #d32f2f;
+            --bg: #f0f2f5;
+            --card-bg: #ffffff;
+            --text: #2c2c2c;
+            --muted: #6c757d;
+            --border: #e9ecef;
+            --shadow: 0 4px 20px rgba(0,0,0,0.08);
+            --radius: 12px;
+            --header-grad: linear-gradient(135deg, #f44336 0%, #e53935 100%);
+            --header-shadow: 0 4px 12px rgba(244, 67, 54, 0.25);
+            --op-bg: #fff8e1;
+            --op-border: #ffe082;
+            --op-label: #f57c00;
+            --help-bg: #f8f9fa;
+            --input-bg: #ffffff;
+            --row-hover: rgba(244, 67, 54, 0.03);
+            --tab-hover-bg: rgba(244, 67, 54, 0.06);
+            --secondary-btn-bg: #ffffff;
+            --secondary-btn-border: #e9ecef;
+            --secondary-btn-hover: #f8f9fa;
+            --danger-btn-bg: #ffffff;
+            --danger-btn-color: #e63333;
+            --danger-btn-border: #f5c6cb;
+        }
 
-    <body style="background-color: #f7f8fa;">
-        <section class="ftco-section goto-here pb-0">
-            <div class="container">
-                <h2 class="heading-section mb-2">AniDownloader web server</h2>
-                <div class="row">
-                    <div class="col-lg-12 mb-5 mb-md-0">
-                        <div class="tabulation">
-                            <ul class="nav nav-pills nav-fill d-md-flex d-block">
-                            </ul>
-                            <div class="tab-content rounded mt-md-3">
-                                <div class="tab-pane container p-4 active">
-                                    <h3 class="heading-section mb-3">Download Status</h3>
-                                    <table class="table" id="currentDownloads">
-                                        <thead>
-                                            <tr>
-                                                <th scope="col">Torrent ID</th>
-                                                <th scope="col">Episode</th>
-                                                <th scope="col">Status</th>
-                                                <th scope="col">Progress</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="currentDownloads-body">
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
+        [data-theme="dark"] {
+            --primary: #ff5252;
+            --primary-dark: #ff1744;
+            --bg: #121212;
+            --card-bg: #1e1e1e;
+            --text: #e8e8e8;
+            --muted: #a0a0a0;
+            --border: #333333;
+            --shadow: 0 4px 24px rgba(0,0,0,0.45);
+            --header-grad: linear-gradient(135deg, #b71c1c 0%, #c62828 100%);
+            --header-shadow: 0 4px 16px rgba(0,0,0,0.5);
+            --op-bg: #2d2400;
+            --op-border: #5c4b00;
+            --op-label: #ffb74d;
+            --help-bg: #252525;
+            --input-bg: #2a2a2a;
+            --row-hover: rgba(255, 82, 82, 0.08);
+            --tab-hover-bg: rgba(255, 82, 82, 0.12);
+            --secondary-btn-bg: #2a2a2a;
+            --secondary-btn-border: #444;
+            --secondary-btn-hover: #333;
+            --danger-btn-bg: #2a2a2a;
+            --danger-btn-color: #ff8a80;
+            --danger-btn-border: #5c2b2b;
+        }
+
+        body {
+            background-color: var(--bg) !important;
+            font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            color: var(--text);
+            min-height: 100vh;
+            transition: background-color 0.25s ease, color 0.25s ease;
+        }
+
+        .page-header {
+            background: var(--header-grad);
+            color: white;
+            padding: 1.25rem 0;
+            margin-bottom: 1.25rem;
+            box-shadow: var(--header-shadow);
+        }
+        .page-header .container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+        .page-header h1 {
+            margin: 0;
+            font-size: 1.65rem;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+        }
+        .page-header .subtitle {
+            opacity: 0.9;
+            font-size: 0.9rem;
+            margin-top: 0.15rem;
+        }
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        /* Theme toggle */
+        .theme-toggle {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            border: 1px solid rgba(255,255,255,0.35);
+            background: rgba(255,255,255,0.12);
+            color: #fff;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.15s;
+            font-size: 1.25rem;
+            line-height: 1;
+            padding: 0;
+        }
+        .theme-toggle:hover {
+            background: rgba(255,255,255,0.25);
+            transform: scale(1.05);
+        }
+        .theme-toggle:active {
+            transform: scale(0.97);
+        }
+        .theme-toggle .icon-sun,
+        .theme-toggle .icon-moon {
+            display: none;
+        }
+        [data-theme="light"] .theme-toggle .icon-moon { display: inline; }
+        [data-theme="dark"] .theme-toggle .icon-sun { display: inline; }
+
+        /* Current operation - always on top */
+        .current-op {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.85rem 1.15rem;
+            background: var(--op-bg);
+            border-radius: var(--radius);
+            border: 1px solid var(--op-border);
+            margin-bottom: 1.25rem;
+            box-shadow: var(--shadow);
+            transition: background 0.25s, border-color 0.25s;
+        }
+        .current-op label {
+            font-weight: 600;
+            color: var(--op-label);
+            margin: 0;
+            white-space: nowrap;
+        }
+        .current-op #current-operation {
+            margin: 0;
+            font-weight: 500;
+            color: var(--text);
+            word-break: break-word;
+        }
+
+        .main-tabs {
+            background: var(--card-bg);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 0.5rem;
+            margin-bottom: 1.5rem;
+            display: flex;
+            gap: 0.35rem;
+            flex-wrap: wrap;
+            transition: background 0.25s, box-shadow 0.25s;
+        }
+        .main-tabs .nav-link {
+            flex: 1;
+            text-align: center;
+            border-radius: 8px !important;
+            padding: 0.75rem 1rem !important;
+            font-weight: 500;
+            color: var(--muted) !important;
+            background: transparent !important;
+            border: none !important;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            box-shadow: none !important;
+        }
+        .main-tabs .nav-link:hover {
+            color: var(--primary) !important;
+            background: var(--tab-hover-bg) !important;
+        }
+        .main-tabs .nav-link.active {
+            background: var(--primary) !important;
+            color: #fff !important;
+            box-shadow: 0 4px 12px rgba(244, 67, 54, 0.35) !important;
+        }
+
+        .tab-pane {
+            display: none;
+            animation: fadeIn 0.25s ease;
+        }
+        .tab-pane.active {
+            display: block;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .content-card {
+            background: var(--card-bg);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 1.75rem;
+            margin-bottom: 1.25rem;
+            transition: background 0.25s, box-shadow 0.25s;
+        }
+        .content-card h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1.25rem;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .content-card h3::before {
+            content: '';
+            display: inline-block;
+            width: 4px;
+            height: 1.1em;
+            background: var(--primary);
+            border-radius: 2px;
+        }
+
+        .table {
+            margin-bottom: 0;
+            color: var(--text);
+        }
+        .table thead th {
+            border-top: none;
+            border-bottom: 2px solid var(--border);
+            font-weight: 600;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            color: var(--muted);
+            padding: 0.85rem 0.75rem;
+            background: transparent;
+        }
+        .table td {
+            vertical-align: middle;
+            padding: 0.75rem;
+            border-color: var(--border);
+            color: var(--text);
+        }
+        .table tbody tr:hover {
+            background-color: var(--row-hover);
+        }
+        .table-responsive {
+            overflow-x: auto;
+        }
+
+        #Settings input[type="text"],
+        #Settings input[type="number"],
+        #Settings select,
+        form input[type="text"],
+        form input[type="number"] {
+            width: 100%;
+            padding: 0.55rem 0.75rem !important;
+            border: 1px solid var(--border) !important;
+            border-radius: 8px !important;
+            font-size: 0.95rem;
+            transition: border-color 0.15s, box-shadow 0.15s, background 0.25s, color 0.25s;
+            box-sizing: border-box;
+            background: var(--input-bg) !important;
+            color: var(--text) !important;
+        }
+        #Settings input:focus,
+        #Settings select:focus,
+        form input:focus {
+            outline: none;
+            border-color: var(--primary) !important;
+            box-shadow: 0 0 0 3px rgba(244, 67, 54, 0.2);
+        }
+        #Settings td:first-child {
+            font-weight: 500;
+            color: var(--text);
+            width: 42%;
+            white-space: nowrap;
+        }
+
+        .btn-modern {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.4rem;
+            padding: 0.65rem 1.35rem;
+            font-weight: 500;
+            font-size: 0.95rem;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: var(--primary);
+            color: #fff;
+            box-shadow: 0 4px 12px rgba(244, 67, 54, 0.3);
+        }
+        .btn-modern:hover {
+            background: var(--primary-dark);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(244, 67, 54, 0.4);
+        }
+        .btn-modern:active {
+            transform: translateY(0);
+        }
+        .btn-secondary-modern {
+            background: var(--secondary-btn-bg);
+            color: var(--text);
+            border: 1px solid var(--secondary-btn-border);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+        }
+        .btn-secondary-modern:hover {
+            background: var(--secondary-btn-hover);
+            border-color: var(--border);
+            color: var(--text);
+        }
+        .btn-danger-sm {
+            background: var(--danger-btn-bg);
+            color: var(--danger-btn-color);
+            border: 1px solid var(--danger-btn-border);
+            padding: 0.25rem 0.6rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .btn-danger-sm:hover {
+            background: var(--primary);
+            color: #fff;
+            border-color: var(--primary);
+        }
+
+        .help-text {
+            background: var(--help-bg);
+            border-left: 3px solid var(--primary);
+            padding: 0.85rem 1rem;
+            border-radius: 0 8px 8px 0;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+            color: var(--muted);
+            transition: background 0.25s;
+        }
+        .help-text h6 {
+            margin: 0.2rem 0;
+            font-weight: 400;
+            color: var(--muted);
+        }
+
+        .actions-row {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+            margin-top: 1.25rem;
+            align-items: center;
+        }
+
+        #Series_Body td input {
+            min-width: 0;
+        }
+
+        /* Dark mode table tweaks (original CSS may force white backgrounds) */
+        [data-theme="dark"] .table {
+            background-color: transparent !important;
+            color: var(--text) !important;
+        }
+        [data-theme="dark"] .table td,
+        [data-theme="dark"] .table th {
+            background-color: transparent !important;
+            color: inherit !important;
+            border-color: var(--border) !important;
+        }
+        [data-theme="dark"] .table thead th {
+            color: var(--muted) !important;
+        }
+
+        @media (max-width: 768px) {
+            .main-tabs .nav-link {
+                font-size: 0.9rem;
+                padding: 0.6rem 0.5rem !important;
+            }
+            .content-card {
+                padding: 1.25rem;
+            }
+            #Settings td:first-child {
+                white-space: normal;
+                width: 40%;
+            }
+            .page-header h1 {
+                font-size: 1.4rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="page-header">
+        <div class="container">
+            <div>
+                <h1>AniDownloader</h1>
+                <div class="subtitle">Web server control panel</div>
+            </div>
+            <div class="header-actions">
+                <button type="button" class="theme-toggle" id="themeToggle" title="Toggle light/dark mode" aria-label="Toggle theme">
+                    <span class="icon-sun">☀️</span>
+                    <span class="icon-moon">🌙</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="container pb-5">
+        <!-- Current operation always visible at top -->
+        <div class="current-op">
+            <label>Current operation:</label>
+            <span id="current-operation">none</span>
+        </div>
+
+        <!-- Main Tabs -->
+        <ul class="nav nav-pills main-tabs" id="mainTabs">
+            <li class="nav-item" style="flex:1;">
+                <a class="nav-link active" href="#" data-tab="status">Download Status</a>
+            </li>
+            <li class="nav-item" style="flex:1;">
+                <a class="nav-link" href="#" data-tab="series">Series to Download</a>
+            </li>
+            <li class="nav-item" style="flex:1;">
+                <a class="nav-link" href="#" data-tab="settings">Program Settings</a>
+            </li>
+        </ul>
+
+        <!-- Tab: Download Status -->
+        <div class="tab-pane active" id="tab-status">
+            <div class="content-card">
+                <h3>Download Status</h3>
+                <div class="table-responsive">
+                    <table class="table" id="currentDownloads">
+                        <thead>
+                            <tr>
+                                <th scope="col">Torrent ID</th>
+                                <th scope="col">Episode</th>
+                                <th scope="col">Status</th>
+                                <th scope="col">Progress</th>
+                            </tr>
+                        </thead>
+                        <tbody id="currentDownloads-body">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: Series to Download -->
+        <div class="tab-pane" id="tab-series">
+            <div class="content-card">
+                <h3>Series to Download</h3>
+                <form method="post" action="update">
+                    ==========TABLE HERE===========
+                    <div class="actions-row">
+                        <button type="submit" id="update" class="btn-modern">Send series table to the server</button>
+                        <button type="button" id="addRowBtn" class="btn-modern btn-secondary-modern" onclick="addRow()">+ Add Row</button>
                     </div>
-                </div>
-            </div>
-            <div class="container">
-                <div class="col-lg-12 mb-5 mb-md-0 align-items-center">
-                    <h6>Current operation:</h6>
-                    <h6 id="current-operation">none</h6>
-                </div>
-            </div>
-        </section>
-        <section class="ftco-section goto-here pb-0">
-            <div class="container">
-                <div class="row">
-                    <div class="col-lg-12 mb-5 mb-md-0">
-                        <div class="tabulation">
-                            <ul class="nav nav-pills nav-fill d-md-flex d-block">
-                            </ul>
-                            <div class="tab-content rounded mt-md-3">
-                                <div class="tab-pane container p-4 active">
-                                    <h3 class="heading-section mb-3">Series to Download</h3>
-                                    <form method="post" action="update">
-                                        ==========TABLE HERE===========
-                                        <br>
-                                        <button id="update">Send series table to the server</button>
-                                    </form>
-                                    <br>
-                                    <button id="addRow" onclick="addRow()">Add Row</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="container">
-                <div class="col-lg-12 mb-5 mb-md-0 align-items-center">
+                </form>
+                <div class="help-text">
                     <h6>Offset adds an offset value to the episode numbers.</h6>
                     <h6>"Filter" is a Regular Expression that excludes matches.</h6>
                 </div>
             </div>
-        </section>
+        </div>
 
-        <section class="ftco-section goto-here pb-0">
-            <div class="container">
-                <div class="row">
-                    <div class="col-lg-12 mb-5 mb-md-0">
-                        <div class="tabulation">
-                            <ul class="nav nav-pills nav-fill d-md-flex d-block">
-                            </ul>
-                            <div class="tab-content rounded mt-md-3">
-                                <div class="tab-pane container p-4 active">
-                                    <h2 class="heading-section mb-3">Program settings</h2>
-                                    <form method="post" action="settings">
-                                        <table id="Settings">
-                                            <thead>
-                                                <tr>
-                                                    <th scope="col">Setting</th>
-                                                    <th scope="col">Value</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody id="Settings">
-                                                <tr>
-                                                    <td>Max File Size (MB)</td>
-                                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="number" name="MaxFileSizeMb" value="MaxFileSizeMb-replace"></td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Delay for web requests</td>
-                                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="number" name="RPSDelayMs" value="RPSDelayMs-replace"></td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Too few seeders Treshold</td>
-                                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="number" name="TooFewSeeders" value="TooFewSeeders-replace"></td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Episode too old (days)</td>
-                                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="number" name="TooOldDays" value="TooOldDays-replace"></td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Episode too new (minutes)</td>
-                                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="number" name="TooNewMinutes" value="TooNewMinutes-replace"></td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Seeding time (hours)</td>
-                                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="number" name="SeedingTimeHours" value="SeedingTimeHours-replace"></td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Seeding Ratio</td>
-                                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="SeedingRatio" value="SeedingRatio-replace"></td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Use Seeding Ratio</td>
-                                                    <td>
-                                                        <select style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="UseRatio">
-                                                            <option value="True" <!--UseRatioTrueSelected-->>True</option>
-                                                            <option value="False" <!--UseRatioFalseSelected-->>False</option>
-                                                        </select>
-                                                    </td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Exclude Batch Releases</td>
-                                                    <td>
-                                                        <select style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="ExcludeBatchReleases">
-                                                            <option value="True" <!--ExcludeBatchReleasesTrueSelected-->>True</option>
-                                                            <option value="False" <!--ExcludeBatchReleasesFalseSelected-->>False</option>
-                                                        </select>
-                                                    </td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Enable Web Server</td>
-                                                    <td>
-                                                        <select style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="EnableWebServer">
-                                                            <option value="True" <!--EnableWebServerTrueSelected-->>True</option>
-                                                            <option value="False" <!--EnableWebServerFalseSelected-->>False</option>
-                                                        </select>
-                                                    </td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Web server Port</td>
-                                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="WebserverPort" value="WebserverPort-replace"></td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Listening IP</td>
-                                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="ListeningIP" value="ListeningIP-replace"></td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Default Series Path</td>
-                                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="DefaultPath" value="DefaultPath-replace"></td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Series Search Paths (Semicolon separated)</td>
-                                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="SearchPaths" value="SearchPaths-replace"></td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Series Search Trigger Filename</td>
-                                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="NeedsConvertFileName" value="NeedsConvertFileName-replace"></td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Uncensored Episodes Regex</td>
-                                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="UncensoredEpisodeRegex" value="UncensoredEpisodeRegex-replace"></td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Filter by Custom Language</td>
-                                                    <td>
-                                                        <select style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="UseCustomLanguage">
-                                                            <option value="True" <!--UseCustomLanguageTrueSelected-->>True</option>
-                                                            <option value="False" <!--UseCustomLanguageFalseSelected-->>False</option>
-                                                        </select>
-                                                    </td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Custom Language (Name) Regex</td>
-                                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="CustomLanguageNameRegex" value="CustomLanguageNameRegex-replace"></td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Custom Language (Description) Regex</td>
-                                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="CustomLanguageDescriptionRegex" value="CustomLanguageDescriptionRegex-replace"></td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Use HWAccel in FFMpeg</td>
-                                                    <td>
-                                                        <select style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="UseTranscodingHWAccel">
-                                                            <option value="True" <!--UseTranscodingHWAccelTrueSelected-->>True</option>
-                                                            <option value="False" <!--UseTranscodingHWAccelFalseSelected-->>False</option>
-                                                        </select>
-                                                    </td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Output Transcoding FFMpeg Commandline Arguments</td>
-                                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="OutputTranscodeCommandLineArguments" value="OutputTranscodeCommandLineArguments-replace"></td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
-                                        <button id="update">Send settings to the server</button>
-                                    </form>
-                                </div>
-                            </div>
-                        </div>
+        <!-- Tab: Program Settings -->
+        <div class="tab-pane" id="tab-settings">
+            <div class="content-card">
+                <h3>Program Settings</h3>
+                <form method="post" action="settings">
+                    <div class="table-responsive">
+                        <table class="table" id="Settings">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Setting</th>
+                                    <th scope="col">Value</th>
+                                </tr>
+                            </thead>
+                            <tbody id="Settings">
+                                <tr>
+                                    <td>Max File Size (MB)</td>
+                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="number" name="MaxFileSizeMb" value="MaxFileSizeMb-replace"></td>
+                                </tr>
+                                <tr>
+                                    <td>Delay for web requests</td>
+                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="number" name="RPSDelayMs" value="RPSDelayMs-replace"></td>
+                                </tr>
+                                <tr>
+                                    <td>Too few seeders Treshold</td>
+                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="number" name="TooFewSeeders" value="TooFewSeeders-replace"></td>
+                                </tr>
+                                <tr>
+                                    <td>Episode too old (days)</td>
+                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="number" name="TooOldDays" value="TooOldDays-replace"></td>
+                                </tr>
+                                <tr>
+                                    <td>Episode too new (minutes)</td>
+                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="number" name="TooNewMinutes" value="TooNewMinutes-replace"></td>
+                                </tr>
+                                <tr>
+                                    <td>Seeding time (hours)</td>
+                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="number" name="SeedingTimeHours" value="SeedingTimeHours-replace"></td>
+                                </tr>
+                                <tr>
+                                    <td>Seeding Ratio</td>
+                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="SeedingRatio" value="SeedingRatio-replace"></td>
+                                </tr>
+                                <tr>
+                                    <td>Use Seeding Ratio</td>
+                                    <td>
+                                        <select style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="UseRatio">
+                                            <option value="True" <!--UseRatioTrueSelected-->>True</option>
+                                            <option value="False" <!--UseRatioFalseSelected-->>False</option>
+                                        </select>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>Exclude Batch Releases</td>
+                                    <td>
+                                        <select style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="ExcludeBatchReleases">
+                                            <option value="True" <!--ExcludeBatchReleasesTrueSelected-->>True</option>
+                                            <option value="False" <!--ExcludeBatchReleasesFalseSelected-->>False</option>
+                                        </select>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>Enable Web Server</td>
+                                    <td>
+                                        <select style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="EnableWebServer">
+                                            <option value="True" <!--EnableWebServerTrueSelected-->>True</option>
+                                            <option value="False" <!--EnableWebServerFalseSelected-->>False</option>
+                                        </select>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>Web server Port</td>
+                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="WebserverPort" value="WebserverPort-replace"></td>
+                                </tr>
+                                <tr>
+                                    <td>Listening IP</td>
+                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="ListeningIP" value="ListeningIP-replace"></td>
+                                </tr>
+                                <tr>
+                                    <td>Default Series Path</td>
+                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="DefaultPath" value="DefaultPath-replace"></td>
+                                </tr>
+                                <tr>
+                                    <td>Series Search Paths (Semicolon separated)</td>
+                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="SearchPaths" value="SearchPaths-replace"></td>
+                                </tr>
+                                <tr>
+                                    <td>Series Search Trigger Filename</td>
+                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="NeedsConvertFileName" value="NeedsConvertFileName-replace"></td>
+                                </tr>
+                                <tr>
+                                    <td>Uncensored Episodes Regex</td>
+                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="UncensoredEpisodeRegex" value="UncensoredEpisodeRegex-replace"></td>
+                                </tr>
+                                <tr>
+                                    <td>Filter by Custom Language</td>
+                                    <td>
+                                        <select style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="UseCustomLanguage">
+                                            <option value="True" <!--UseCustomLanguageTrueSelected-->>True</option>
+                                            <option value="False" <!--UseCustomLanguageFalseSelected-->>False</option>
+                                        </select>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>Custom Language (Name) Regex</td>
+                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="CustomLanguageNameRegex" value="CustomLanguageNameRegex-replace"></td>
+                                </tr>
+                                <tr>
+                                    <td>Custom Language (Description) Regex</td>
+                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="CustomLanguageDescriptionRegex" value="CustomLanguageDescriptionRegex-replace"></td>
+                                </tr>
+                                <tr>
+                                    <td>Use HWAccel in FFMpeg</td>
+                                    <td>
+                                        <select style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="UseTranscodingHWAccel">
+                                            <option value="True" <!--UseTranscodingHWAccelTrueSelected-->>True</option>
+                                            <option value="False" <!--UseTranscodingHWAccelFalseSelected-->>False</option>
+                                        </select>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>Output Transcoding FFMpeg Commandline Arguments</td>
+                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="OutputTranscodeCommandLineArguments" value="OutputTranscodeCommandLineArguments-replace"></td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
-                </div>
-            </div>
-            <div class="container">
-                <div class="col-lg-12 mb-5 mb-md-0 align-items-center">
+                    <div class="actions-row">
+                        <button type="submit" id="update" class="btn-modern">Send settings to the server</button>
+                    </div>
+                </form>
+                <div class="help-text">
                     <h6>The "Output Transcoding FFMpeg Commandline Arguments" setting follows the following usage:</h6>
                     <h6>FFMpeg -i "filetoConvert" -y OutputTranscodeCommandLineArguments "finalEpisodeName"</h6>
                     <h6>Only modify this parameter if you know what are you doing.</h6>
                 </div>
             </div>
-        </section>
+        </div>
+    </div>
 
-        <script type="text/javascript">
-            function addRow() {
-                var tbody = document.getElementById("Series_Body");
-                var rows = tbody.getElementsByTagName("tr");
-                var maxIndex = -1;
-                for (var i = 0; i < rows.length; i++) {
-                    var id = rows[i].id;
-                    if (id && id.startsWith("sr_")) {
-                        var num = parseInt(id.substring(3), 10);
-                        if (!isNaN(num) && num > maxIndex) {
-                            maxIndex = num;
-                        }
+    <script type="text/javascript">
+        // ========== Theme handling ==========
+        (function () {
+            const root = document.documentElement;
+            const toggleBtn = document.getElementById('themeToggle');
+            const storageKey = 'anidownloader-theme';
+
+            function getPreferredTheme() {
+                const stored = localStorage.getItem(storageKey);
+                if (stored === 'light' || stored === 'dark') return stored;
+                return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            }
+
+            function applyTheme(theme) {
+                root.setAttribute('data-theme', theme);
+                localStorage.setItem(storageKey, theme);
+            }
+
+            // Initial apply (as early as possible)
+            applyTheme(getPreferredTheme());
+
+            // Toggle click
+            if (toggleBtn) {
+                toggleBtn.addEventListener('click', function () {
+                    const current = root.getAttribute('data-theme') || 'light';
+                    applyTheme(current === 'dark' ? 'light' : 'dark');
+                });
+            }
+
+            // React to system preference changes (only if user hasn't explicitly chosen)
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function (e) {
+                if (!localStorage.getItem(storageKey)) {
+                    applyTheme(e.matches ? 'dark' : 'light');
+                }
+            });
+        })();
+
+        // ========== Tab switching ==========
+        document.querySelectorAll('#mainTabs .nav-link').forEach(function(link) {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                var tabId = this.getAttribute('data-tab');
+
+                document.querySelectorAll('#mainTabs .nav-link').forEach(function(l) {
+                    l.classList.remove('active');
+                });
+                this.classList.add('active');
+
+                document.querySelectorAll('.tab-pane').forEach(function(pane) {
+                    pane.classList.remove('active');
+                });
+                document.getElementById('tab-' + tabId).classList.add('active');
+            });
+        });
+
+        function addRow() {
+            var tbody = document.getElementById("Series_Body");
+            var rows = tbody.getElementsByTagName("tr");
+            var maxIndex = -1;
+            for (var i = 0; i < rows.length; i++) {
+                var id = rows[i].id;
+                if (id && id.startsWith("sr_")) {
+                    var num = parseInt(id.substring(3), 10);
+                    if (!isNaN(num) && num > maxIndex) {
+                        maxIndex = num;
                     }
                 }
-                var rowNumber = maxIndex + 1;
-                var element = '<tr id="sr_' + rowNumber + '">\
+            }
+            var rowNumber = maxIndex + 1;
+            var element = '<tr id="sr_' + rowNumber + '">\
  <td><input style=\"width:105%; padding:inherit; box-sizing:border-box;\" type=\"text\" name=\"Name-'+ rowNumber + '\" value=\"\"/></td>\
  <td><input style=\"width:105%; padding:inherit; box-sizing:border-box;\" type=\"text\" name=\"Path-'+ rowNumber + '\" value=\"DefaultPath-replace\"/></td>\
  <td><input style=\"width:105%; padding:inherit; box-sizing:border-box;\" type=\"text\" name=\"Offset-'+ rowNumber + '\" value=\"0\"/></td>\
  <td><input style=\"width:105%; padding:inherit; box-sizing:border-box;\" type=\"text\" name=\"Filter-'+ rowNumber + '\" value=\"\"/></td>\
- <td><button id=\"del-' + rowNumber + '\" type=\"button\" onclick=\"deleteRow(' + rowNumber + ')\">x</button></td>\
+ <td><button id=\"del-' + rowNumber + '\" type=\"button\" class=\"btn-danger-sm\" onclick=\"deleteRow(' + rowNumber + ')\">x</button></td>\
     </tr>';
-                tbody.innerHTML += element;
-            }          
+            tbody.innerHTML += element;
+        }          
 
-            function deleteRow(index) {
-                var seriesBody = document.getElementById("Series_Body");
-                var row = seriesBody.querySelector("#sr_" + index);
-                if (row) {
-                    row.remove();
-                }
+        function deleteRow(index) {
+            var seriesBody = document.getElementById("Series_Body");
+            var row = seriesBody.querySelector("#sr_" + index);
+            if (row) {
+                row.remove();
             }
+        }
 
-            function updateTableContents(id) {
-                (async () => {
-                    let response = await fetch('./status');
-                    let newHtml = await response.text();
+        function updateTableContents(id) {
+            (async () => {
+                let response = await fetch('./status');
+                let newHtml = await response.text();
 
-                    // Create a temporary table to parse the new rows properly
-                    let tempTable = document.createElement('table');
-                    tempTable.innerHTML = '<tbody>' + newHtml + '</tbody>';
-                    let newRows = Array.from(tempTable.querySelectorAll('tr'));
+                // Create a temporary table to parse the new rows properly
+                let tempTable = document.createElement('table');
+                tempTable.innerHTML = '<tbody>' + newHtml + '</tbody>';
+                let newRows = Array.from(tempTable.querySelectorAll('tr'));
 
-                    // Get existing tbody and rows
-                    let tbody = document.getElementById(id);
-                    let existingRows = Array.from(tbody.querySelectorAll('tr'));
+                // Get existing tbody and rows
+                let tbody = document.getElementById(id);
+                let existingRows = Array.from(tbody.querySelectorAll('tr'));
 
-                    // Map existing rows by unique key (using "Episode" from second <td>)
-                    let existingMap = new Map();
-                    existingRows.forEach(row => {
-                        let key = row.querySelector('td:nth-child(2)')?.textContent.trim();
-                        if (key) existingMap.set(key, row);
-                    });
+                // Map existing rows by unique key (using "Episode" from second <td>)
+                let existingMap = new Map();
+                existingRows.forEach(row => {
+                    let key = row.querySelector('td:nth-child(2)')?.textContent.trim();
+                    if (key) existingMap.set(key, row);
+                });
 
-                    // Clear tempTable to avoid memory leaks
-                    tempTable = null;
+                // Clear tempTable to avoid memory leaks
+                tempTable = null;
 
-                    // Track seen keys for removal later
-                    let seenKeys = new Set();
+                // Track seen keys for removal later
+                let seenKeys = new Set();
 
-                    newRows.forEach(newRow => {
-                        let key = newRow.querySelector('td:nth-child(2)')?.textContent.trim();
-                        if (!key) return; // Skip invalid rows
+                newRows.forEach(newRow => {
+                    let key = newRow.querySelector('td:nth-child(2)')?.textContent.trim();
+                    if (!key) return; // Skip invalid rows
 
-                        seenKeys.add(key);
+                    seenKeys.add(key);
 
-                        let existingRow = existingMap.get(key);
-                        if (existingRow) {
-                            // Update existing row: Compare and update cells if changed
-                            let newCells = newRow.querySelectorAll('td');
-                            let existingCells = existingRow.querySelectorAll('td');
-                            for (let i = 0; i < existingCells.length; i++) {
-                                if (existingCells[i].innerHTML !== newCells[i].innerHTML) {
-                                    existingCells[i].innerHTML = newCells[i].innerHTML;
-                                }
+                    let existingRow = existingMap.get(key);
+                    if (existingRow) {
+                        // Update existing row: Compare and update cells if changed
+                        let newCells = newRow.querySelectorAll('td');
+                        let existingCells = existingRow.querySelectorAll('td');
+                        for (let i = 0; i < existingCells.length; i++) {
+                            if (existingCells[i].innerHTML !== newCells[i].innerHTML) {
+                                existingCells[i].innerHTML = newCells[i].innerHTML;
                             }
-                        } else {
-                            // Add new row
-                            tbody.appendChild(newRow.cloneNode(true)); // Clone to avoid moving from temp
                         }
-                    });
+                    } else {
+                        // Add new row
+                        tbody.appendChild(newRow.cloneNode(true)); // Clone to avoid moving from temp
+                    }
+                });
 
-                    // Remove rows no longer present
-                    existingRows.forEach(row => {
-                        let key = row.querySelector('td:nth-child(2)')?.textContent.trim();
-                        if (key && !seenKeys.has(key)) {
-                            row.remove();
-                        }
-                    });
-                })();
-            }
-
-            function updateCurrentOperation(id) {
-                (async () => {
-                    let response = await fetch('./currentoperation');
-                    let termresult = await response.text();
-                    document.getElementById(id).innerHTML = termresult;
-                })()
-            };
-
-
-            (function () { //Auto-update the table every 300ms
-                updateTableContents("currentDownloads-body");
-                updateCurrentOperation("current-operation");
-                setTimeout(arguments.callee, 300);
+                // Remove rows no longer present
+                existingRows.forEach(row => {
+                    let key = row.querySelector('td:nth-child(2)')?.textContent.trim();
+                    if (key && !seenKeys.has(key)) {
+                        row.remove();
+                    }
+                });
             })();
+        }
 
-        </script>
+        function updateCurrentOperation(id) {
+            (async () => {
+                let response = await fetch('./currentoperation');
+                let termresult = await response.text();
+                document.getElementById(id).innerHTML = termresult;
+            })()
+        };
 
-
-    </body>
+        (function () { //Auto-update the table every 300ms
+            updateTableContents("currentDownloads-body");
+            updateCurrentOperation("current-operation");
+            setTimeout(arguments.callee, 300);
+        })();
+    </script>
+</body>
 </html>

@@ -16,6 +16,31 @@ namespace AniDownloaderTerminal
 
         public static readonly DataTable SeriesTable = new("Series");
         public static readonly DataTable CurrentStatusTable = new("Torrent Status");
+
+        /// <summary>
+        /// Last fully-built status HTML for the web UI. Updated by the main status
+        /// loop after each rebuild so /status never needs to lock CurrentStatusTable
+        /// or return empty under contention.
+        /// </summary>
+        public static string StatusHtmlSnapshot { get; private set; } = string.Empty;
+        private static readonly object StatusHtmlSnapshotLock = new();
+
+        public static void PublishStatusHtmlSnapshot(string html)
+        {
+            lock (StatusHtmlSnapshotLock)
+            {
+                StatusHtmlSnapshot = html ?? string.Empty;
+            }
+        }
+
+        public static string GetStatusHtmlSnapshot()
+        {
+            lock (StatusHtmlSnapshotLock)
+            {
+                return StatusHtmlSnapshot;
+            }
+        }
+
         private static DateTime LastRequestTime;
 
         private static readonly HttpClient httpClient = CreateHttpClient();
@@ -28,7 +53,7 @@ namespace AniDownloaderTerminal
         private static HttpClient CreateHttpClient()
         {
             HttpClient client = (new HttpClient { Timeout = TimeSpan.FromSeconds(60) });
-            client.DefaultRequestHeaders.Add(HttpRequestHeader.UserAgent.ToString(), "Anidownloader/1.2.1" );
+            client.DefaultRequestHeaders.Add(HttpRequestHeader.UserAgent.ToString(), "Anidownloader/1.2.1");
             return client;
         }
 
@@ -44,7 +69,7 @@ namespace AniDownloaderTerminal
         }
         private static async Task<T?> PerformHttpGetOperationAsync<T>(Func<HttpResponseMessage, Task<T>> operation, string url)
         {
-            
+
             CurrentOpsQueue.Enqueue($"Loading: {url}");
             try
             {

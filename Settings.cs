@@ -49,6 +49,49 @@
         public static string NeedsConvertFileName { get => _NeedsConvertFileName; set => _NeedsConvertFileName = value; }
         static string _NeedsConvertFileName = ".needsConvert";
 
+        /// <summary>
+        /// Suffix appended to a video filename to form its verification marker
+        /// (e.g. "Series 01.mkv" → "Series 01.mkv.h264ok"). The marker stores
+        /// size + UTC mtime so we can skip re-probing files that have not changed.
+        /// </summary>
+        public static string VerifiedH264MarkerSuffix { get => _VerifiedH264MarkerSuffix; set => _VerifiedH264MarkerSuffix = value; }
+        static string _VerifiedH264MarkerSuffix = ".h264ok";
+
+        /// <summary>
+        /// File name written inside each episode .temp folder to claim encoding work
+        /// across multiple machines (main instance + remote workers).
+        /// </summary>
+        public static string WorkerClaimFileName { get => _WorkerClaimFileName; set => _WorkerClaimFileName = value; }
+        static string _WorkerClaimFileName = "worker.claim";
+
+        /// <summary>
+        /// Seconds without a heartbeat before a worker.claim is considered stale and
+        /// may be taken by another machine. Keep this above the worker heartbeat interval.
+        /// </summary>
+        public static int WorkerClaimStaleSeconds { get => _WorkerClaimStaleSeconds; set => _WorkerClaimStaleSeconds = value; }
+        static int _WorkerClaimStaleSeconds = 180;
+
+        /// <summary>
+        /// Optional fixed worker id. When empty, hostname-pid is used automatically.
+        /// Set this on remote encoder machines for clearer status display.
+        /// </summary>
+        public static string WorkerId { get => _WorkerId; set => _WorkerId = value; }
+        static string _WorkerId = "";
+
+        /// <summary>
+        /// How often (ms) a remote encoder worker scans for pending encode work.
+        /// </summary>
+        public static int WorkerScanIntervalMs { get => _WorkerScanIntervalMs; set => _WorkerScanIntervalMs = value; }
+        static int _WorkerScanIntervalMs = 15000;
+
+        /// <summary>
+        /// How often (ms) the main instance re-reads worker.claim files from disk
+        /// to refresh remote encode progress in the status table. The UI itself
+        /// still repaints much more often; only the filesystem scan is throttled.
+        /// </summary>
+        public static int WorkerClaimRefreshMs { get => _WorkerClaimRefreshMs; set => _WorkerClaimRefreshMs = value; }
+        static int _WorkerClaimRefreshMs = 2000;
+
         public static string[] SearchPaths { get => _SearchPaths; set => _SearchPaths = value; }
         static string[] _SearchPaths = ["/"];
 
@@ -122,6 +165,12 @@
                 TryUpdateSetting(settingValues, "DefaultPath", ref _DefaultPath);
                 TryUpdateSetting(settingValues, "SearchPaths", ref _SearchPaths);
                 TryUpdateSetting(settingValues, "_NeedsConvertFileName", ref _NeedsConvertFileName);
+                TryUpdateSetting(settingValues, "VerifiedH264MarkerSuffix", ref _VerifiedH264MarkerSuffix);
+                TryUpdateSetting(settingValues, "WorkerClaimFileName", ref _WorkerClaimFileName);
+                TryUpdateSetting(settingValues, "WorkerClaimStaleSeconds", ref _WorkerClaimStaleSeconds);
+                TryUpdateSetting(settingValues, "WorkerId", ref _WorkerId);
+                TryUpdateSetting(settingValues, "WorkerScanIntervalMs", ref _WorkerScanIntervalMs);
+                TryUpdateSetting(settingValues, "WorkerClaimRefreshMs", ref _WorkerClaimRefreshMs);
                 TryUpdateSetting(settingValues, "UncensoredEpisodeRegex", ref _UncensoredEpisodeRegex);
                 TryUpdateSetting(settingValues, "CustomLanguageNameRegex", ref _CustomLanguageNameRegex);
                 TryUpdateSetting(settingValues, "CustomLanguageDescriptionRegex", ref _CustomLanguageDescriptionRegex);

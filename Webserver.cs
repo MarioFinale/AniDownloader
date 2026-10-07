@@ -118,6 +118,55 @@ namespace AniDownloaderTerminal
                 }
 
                 string responseData = string.Empty;
+                string? path = req.Url?.AbsolutePath;
+
+                // ---- Fast paths: do NOT rebuild the settings page (was the main cause of
+                // slow /status polling after status-table work got heavier). ----
+                if (path == "/status")
+                {
+                    // Always serve the last published snapshot — never blocks on
+                    // CurrentStatusTable and never returns empty due to lock contention.
+                    responseData = Global.GetStatusHtmlSnapshot();
+                    byte[] statusBytes = Encoding.UTF8.GetBytes(responseData);
+                    resp.ContentType = "text/html";
+                    resp.ContentEncoding = Encoding.UTF8;
+                    resp.ContentLength64 = statusBytes.LongLength;
+                    await resp.OutputStream.WriteAsync(statusBytes);
+                    resp.Close();
+                    continue;
+                }
+
+                if (path == "/currentoperation")
+                {
+                    try
+                    {
+                        Global.CurrentOpsQueue.TryPeek(out var peek);
+                        responseData = peek ?? string.Empty;
+                    }
+                    catch (Exception ex)
+                    {
+                        Global.TaskAdmin.Logger.EX_Log($"currentoperation Error: {ex.Message}", "HandleIncomingConnections");
+                    }
+                    byte[] opBytes = Encoding.UTF8.GetBytes(responseData);
+                    resp.ContentType = "text/html";
+                    resp.ContentEncoding = Encoding.UTF8;
+                    resp.ContentLength64 = opBytes.LongLength;
+                    await resp.OutputStream.WriteAsync(opBytes);
+                    resp.Close();
+                    continue;
+                }
+
+                if (path == "/style.css")
+                {
+                    responseData = File.ReadAllText(Path.Join(Global.Exepath, "style.css"));
+                    byte[] cssBytes = Encoding.UTF8.GetBytes(responseData);
+                    resp.ContentType = "text/css";
+                    resp.ContentEncoding = Encoding.UTF8;
+                    resp.ContentLength64 = cssBytes.LongLength;
+                    await resp.OutputStream.WriteAsync(cssBytes);
+                    resp.Close();
+                    continue;
+                }
 
                 if ((req.HttpMethod == "POST") && (req.Url != null) && (req.Url.AbsolutePath == "/update"))
                 {
@@ -271,37 +320,6 @@ namespace AniDownloaderTerminal
                     runServer = false;
                 }
 
-
-                if (req.Url != null && req.Url.AbsolutePath == "/style.css")
-                {
-                    responseData = File.ReadAllText(Path.Join(Global.Exepath, "style.css"));
-                    resp.ContentType = "text/css";
-                }
-
-                if (req.Url != null && req.Url.AbsolutePath == "/status")
-                {
-                    responseData = ConvertStatusDataTableToHTML(Global.CurrentStatusTable);
-                    resp.ContentType = "text/html";
-                }
-
-                if (req.Url != null && req.Url.AbsolutePath == "/currentoperation")
-                {
-                    try
-                    {
-                        Global.CurrentOpsQueue.TryPeek(out var peek);
-                        if (peek != null)
-                        {
-                            responseData = peek;
-                        }                        
-                    }
-                    catch (Exception ex)
-                    {
-                        Global.TaskAdmin.Logger.EX_Log($"currentoperation Error: {ex.Message}", "HandleIncomingConnections");
-                    }
-
-                    resp.ContentType = "text/html";
-                }
-
                 byte[] data = Encoding.UTF8.GetBytes(responseData);
                 resp.ContentEncoding = Encoding.UTF8;
                 resp.ContentLength64 = data.LongLength;
@@ -389,25 +407,39 @@ namespace AniDownloaderTerminal
             return html;
         }
 
-        private static string ConvertStatusDataTableToHTML(DataTable table)
+        public static string ConvertStatusDataTableToHTML(DataTable table)
         {
+            // Snapshot under lock as briefly as possible so the 200ms status updater
+            // and the web poller do not block each other for long.
             DataTable dt;
-            lock (table)
+            bool lockTaken = false;
+            try
             {
-                dt = table.Copy(); //Copy the dataTable to avoid collection modified exceptions.
+                // Prefer not to stall the HTTP response if the updater is mid-rebuild.
+                Monitor.TryEnter(table, 50, ref lockTaken);
+                if (!lockTaken)
+                    return string.Empty; // client will refresh on next poll
+                dt = table.Copy();
             }
-            string html = "";
+            finally
+            {
+                if (lockTaken)
+                    Monitor.Exit(table);
+            }
+
+            var sb = new StringBuilder(dt.Rows.Count * 128);
             for (int i = 0; i < dt.Rows.Count; i++)
             {
-                html += $"<tr id=\"sr_{i}\">";
+                sb.Append("<tr id=\"sr_").Append(i).Append("\">");
                 for (int j = 0; j < dt.Columns.Count; j++)
                 {
-                    html += $"<td style=\"width:inherit; padding:inherit; box-sizing:border-box; text-align:left;\">{dt.Rows[i][j]}</td>";
+                    sb.Append("<td style=\"width:inherit; padding:inherit; box-sizing:border-box; text-align:left;\">")
+                      .Append(System.Net.WebUtility.HtmlEncode(dt.Rows[i][j]?.ToString() ?? string.Empty))
+                      .Append("</td>");
                 }
-
-                html += "</tr>";
+                sb.Append("</tr>");
             }
-            return html;
+            return sb.ToString();
         }
     }
 

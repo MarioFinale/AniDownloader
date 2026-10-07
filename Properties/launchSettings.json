@@ -1,7 +1,8 @@
 {
   "profiles": {
     "AniDownloaderTerminal": {
-      "commandName": "Project"
+      "commandName": "Project",
+      "commandLineArgs": "--worker"
     },
     "WSL": {
       "commandName": "WSL2",
