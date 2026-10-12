@@ -1,6 +1,7 @@
 ﻿using MonoTorrent;
 using MonoTorrent.Client;
 using MonoTorrent.Client.Tracker;
+using System.Data;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using static AniDownloaderTerminal.SeriesDownloader.EpisodeToDownload;
@@ -28,6 +29,9 @@ namespace AniDownloaderTerminal
         private static partial Regex FFmpegDurationRegex();
         [GeneratedRegex(@"time=(\d{2}:\d{2}:\d{2}\.\d{2}).+?speed=(\d{1,20}\.*\d{1,20})x")]
         private static partial Regex FFmpegTimeSpeedRegex();
+        // Trailing 1-3 digits on a temp folder name, matching Program.TempFolderEpisodeNumberRegex.
+        [GeneratedRegex(@"\d{1,3}$")]
+        private static partial Regex TempFolderEpisodeNumberRegex();
 
         public SeriesDownloader()
         {
@@ -48,6 +52,158 @@ namespace AniDownloaderTerminal
                 MaximumHalfOpenConnections = 15,
             };
             engine = new ClientEngine(settingBuilder.ToSettings());
+        }
+
+        /// <summary>
+        /// Stops every loaded torrent so MonoTorrent flushes fast-resume data before the process exits.
+        /// </summary>
+        public async Task StopAllTorrentsAsync()
+        {
+            try
+            {
+                await engine.StopAllAsync();
+            }
+            catch (Exception ex)
+            {
+                Global.TaskAdmin.Logger.EX_Log(ex.Message, "StopAllTorrentsAsync");
+            }
+        }
+
+        /// <summary>
+        /// Re-attaches torrents left in a temporary folder by a previous run so download or seeding can continue.
+        /// </summary>
+        /// <remarks>
+        /// How it works: only folders that still contain a .torrent file and a Downloading,
+        /// DownloadedSeeding, or EncodedSeeding state file are considered. The torrent is added
+        /// from the local file (no re-download) and started. Incomplete torrents stay Downloading.
+        /// A live Seeding state restores DownloadedSeeding, or EncodedSeeding when the episode
+        /// was already encoded, so CleanEncodedFiles can keep seeding until the configured ratio.
+        /// A previous state file is never treated as proof of completion by itself.
+        /// </remarks>
+        public async Task ResumeExistingTorrentsAsync()
+        {
+            List<string> seriesPaths = [];
+            lock (Global.SeriesTable)
+            {
+                foreach (DataRow row in Global.SeriesTable.Rows)
+                {
+                    string? seriesPath = row["Path"]?.ToString();
+                    if (string.IsNullOrWhiteSpace(seriesPath)) continue;
+                    if (!Directory.Exists(seriesPath)) continue;
+                    seriesPaths.Add(seriesPath);
+                }
+            }
+
+            foreach (string seriesPath in seriesPaths)
+            {
+                string[] tempDirs;
+                try
+                {
+                    tempDirs = Directory.GetDirectories(seriesPath, "*.temp");
+                }
+                catch (Exception ex)
+                {
+                    Global.TaskAdmin.Logger.EX_Log($"Failed to list temp folders in '{seriesPath}': {ex.Message}", "ResumeExistingTorrentsAsync");
+                    continue;
+                }
+
+                foreach (string tempDirPath in tempDirs)
+                {
+                    await ResumeOneTempFolderAsync(seriesPath, tempDirPath);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Resumes a single temporary episode folder when it still has a torrent file and a download, seed, or encoded-seed state.
+        /// </summary>
+        private async Task ResumeOneTempFolderAsync(string seriesPath, string tempDirPath)
+        {
+            string episodeName = Path.GetFileNameWithoutExtension(tempDirPath).Trim();
+            if (string.IsNullOrWhiteSpace(episodeName)) return;
+
+            Match numberMatch = TempFolderEpisodeNumberRegex().Match(episodeName);
+            if (!numberMatch.Success) return;
+            if (!int.TryParse(numberMatch.Value, out int episodeNumber)) return;
+
+            lock (Episodes)
+            {
+                if (Episodes.ContainsKey(episodeName)) return;
+            }
+
+            string torrentFilePath = Path.Combine(tempDirPath, episodeName + ".torrent");
+            if (!File.Exists(torrentFilePath)) return;
+
+            bool wasDownloading = File.Exists(Path.Combine(tempDirPath, "state.Downloading"));
+            bool wasSeeding = File.Exists(Path.Combine(tempDirPath, "state.DownloadedSeeding"));
+            bool wasEncodedSeeding = File.Exists(Path.Combine(tempDirPath, "state.EncodedSeeding"));
+            if (!wasDownloading && !wasSeeding && !wasEncodedSeeding) return;
+
+            // Local path keeps TorrentName non-empty so ratio/time cleanup still applies.
+            EpisodeToDownload episode = new(torrentFilePath, episodeName, seriesPath, episodeNumber);
+            lock (Episodes)
+            {
+                if (Episodes.ContainsKey(episodeName)) return;
+                Episodes.Add(episodeName, episode);
+            }
+
+            try
+            {
+                TorrentManager? manager = GetEngineTorrentManagerByPath(torrentFilePath, tempDirPath);
+                manager ??= await engine.AddAsync(torrentFilePath, tempDirPath);
+                AttachTorrentEventHandlers(episode, manager);
+                await manager.StartAsync();
+
+                lock (episode)
+                {
+                    episode.TorrentManager = manager;
+                    // Never promote from the old state file alone. Only a live Seeding state is complete.
+                    // EncodedSeeding is restored only when the torrent is actually seeding, so the
+                    // ratio/time rules in CleanEncodedFiles keep running instead of re-encoding.
+                    if (manager.State == TorrentState.Seeding)
+                    {
+                        if (wasEncodedSeeding)
+                        {
+                            episode.SetState(State.EncodedSeeding);
+                            episode.StatusDescription = "Encoded-Seeding";
+                        }
+                        else
+                        {
+                            episode.SetState(State.DownloadedSeeding);
+                            episode.StatusDescription = "Downloaded-Seeding";
+                        }
+                        episode.StatusPercentage = 100;
+                    }
+                    else
+                    {
+                        episode.SetState(State.Downloading);
+                        episode.StatusDescription = "Downloading";
+                        episode.StatusPercentage = Convert.ToInt32(manager.Progress);
+                    }
+                }
+
+                Global.TaskAdmin.Logger.Log($"Resumed torrent for '{episodeName}' from '{torrentFilePath}'.", "ResumeExistingTorrentsAsync");
+            }
+            catch (Exception ex)
+            {
+                Global.TaskAdmin.Logger.EX_Log($"Failed to resume '{episodeName}': {ex.Message}", "ResumeExistingTorrentsAsync");
+                lock (episode)
+                {
+                    episode.StatusDescription = "Resume failed";
+                }
+            }
+        }
+
+        /// <summary>
+        /// Attaches the torrent event handlers used for status and state transitions.
+        /// </summary>
+        private static void AttachTorrentEventHandlers(EpisodeToDownload episode, TorrentManager manager)
+        {
+            manager.TorrentStateChanged += (o, e) => TorrentStateChangedDelegate(e, episode);
+            manager.PeerConnected += (o, e) => TorrentConnectionSuccessfulDelegate(e, episode);
+            manager.ConnectionAttemptFailed += (o, e) => TorrentConnectionAttemptFailedDelegate(e, episode);
+            manager.PieceHashed += (o, e) => TorrentPieceHashedDelegate(e, episode);
+            manager.TrackerManager.AnnounceComplete += (o, e) => TorrentTrackerManagerAnnounceCompleteDelegate(e, episode);
         }
 
 
@@ -186,11 +342,7 @@ namespace AniDownloaderTerminal
                     lock (episode)
                     {
                         episode.TorrentManager = manager;
-                        episode.TorrentManager.TorrentStateChanged += (o, e) => TorrentStateChangedDelegate(e, episode);
-                        episode.TorrentManager.PeerConnected += (o, e) => TorrentConnectionSuccessfulDelegate(e, episode);
-                        episode.TorrentManager.ConnectionAttemptFailed += (o, e) => TorrentConnectionAttemptFailedDelegate(e, episode);
-                        episode.TorrentManager.PieceHashed += (o, e) => TorrentPieceHashedDelegate(e, episode);
-                        episode.TorrentManager.TrackerManager.AnnounceComplete += (o, e) => TorrentTrackerManagerAnnounceCompleteDelegate(e, episode);
+                        AttachTorrentEventHandlers(episode, episode.TorrentManager);
                         _ = Task.Run(() =>
                         {
                             episode.TorrentManager.StartAsync();
@@ -918,6 +1070,12 @@ namespace AniDownloaderTerminal
             {
                 lock (episode)
                 {
+                    // Do not demote an episode that is already encoded and seeding.
+                    if (episode.EpisodeState == State.EncodedSeeding || episode.EpisodeState == State.EncodedFound)
+                    {
+                        episode.StatusPercentage = 100;
+                        return;
+                    }
                     episode.SetState(EpisodeToDownload.State.DownloadedSeeding);
                     episode.StatusDescription = "Downloaded-Seeding";
                     episode.StatusPercentage = 100;

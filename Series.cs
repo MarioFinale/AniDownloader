@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 namespace AniDownloaderTerminal
 {
     /// <summary>
-    /// A configured series: title, library path, episode offset, and an exclude filter.
+    /// A configured series: title, library path, episode offset, and a filter that can exclude or include releases.
     /// </summary>
     [Serializable]
     public partial class Series : ISerializable
@@ -26,9 +26,17 @@ namespace AniDownloaderTerminal
         public int Offset { get; }
 
         /// <summary>
-        /// Regular expression that excludes a release when the title matches. Empty means no extra exclusion.
+        /// Regular expression applied to the release title. Empty means no extra filtering.
+        /// When <see cref="FilterIsInclusive"/> is false (default), a matching title is excluded.
+        /// When true, only a matching title is kept; a non-matching title is excluded.
         /// </summary>
         public string Filter { get; }
+
+        /// <summary>
+        /// When true, the filter is inclusive: only releases whose title matches the regular expression are kept.
+        /// When false, the filter is exclusive: releases whose title matches are excluded. Empty filter ignores this flag.
+        /// </summary>
+        public bool FilterIsInclusive { get; }
 
         private const string NyaaRssSearchUrlFormat = "https://nyaa.si/?page=rss&q={0}&c=1_0&f=0";
         private const string IllegalPathCharacters = "/\\?%*:|<>";
@@ -40,7 +48,7 @@ namespace AniDownloaderTerminal
         /// <summary>
         /// Creates a series after checking the name, path, filter, and that the directory exists.
         /// </summary>
-        public Series(string name, string path, int offset, string filter)
+        public Series(string name, string path, int offset, string filter, bool filterIsInclusive = false)
         {
             if (name == null) throw new ArgumentNullException(nameof(name));
             if (path == null) throw new ArgumentNullException(nameof(path));
@@ -51,13 +59,15 @@ namespace AniDownloaderTerminal
             Path = path;
             Offset = offset;
             Filter = filter;
+            FilterIsInclusive = filterIsInclusive;
         }
 
         /// <summary>
         /// Restores a series from the serialization contract written by <see cref="GetObjectData"/>.
         /// </summary>
         /// <remarks>
-        /// How it works: Name, Path, and Filter are strings. Offset is an int. Filter must be read as a string; reading it as an int fails the round trip.
+        /// How it works: Name, Path, and Filter are strings. Offset is an int. FilterIsInclusive is a bool that defaults to false when the value is absent.
+        /// Filter must be read as a string; reading it as an int fails the round trip.
         /// </remarks>
         public Series(SerializationInfo info, StreamingContext context)
         {
@@ -67,6 +77,15 @@ namespace AniDownloaderTerminal
             string? path = (string?)info.GetValue("Path", typeof(string));
             int? offset = (int?)info.GetValue("Offset", typeof(int));
             string? filter = (string?)info.GetValue("Filter", typeof(string));
+            bool filterIsInclusive = false;
+            try
+            {
+                filterIsInclusive = info.GetBoolean("FilterIsInclusive");
+            }
+            catch (SerializationException)
+            {
+                // Older serialized data has no FilterIsInclusive; keep the exclusive default.
+            }
             if (name == null) throw new ArgumentNullException(nameof(name));
             if (path == null) throw new ArgumentNullException(nameof(path));
             if (offset == null) throw new ArgumentNullException(nameof(offset));
@@ -76,6 +95,7 @@ namespace AniDownloaderTerminal
             Path = path;
             Offset = (int)offset;
             Filter = filter;
+            FilterIsInclusive = filterIsInclusive;
         }
 
         /// <summary>
@@ -155,7 +175,7 @@ namespace AniDownloaderTerminal
         }
 
         /// <summary>
-        /// Writes Name, Path, Offset, and Filter using the same types the constructor reads back.
+        /// Writes Name, Path, Offset, Filter, and FilterIsInclusive using the same types the constructor reads back.
         /// </summary>
         public void GetObjectData(SerializationInfo info, StreamingContext context)
         {
@@ -165,6 +185,7 @@ namespace AniDownloaderTerminal
             info.AddValue("Path", Path, typeof(string));
             info.AddValue("Offset", Offset, typeof(int));
             info.AddValue("Filter", Filter, typeof(string));
+            info.AddValue("FilterIsInclusive", FilterIsInclusive, typeof(bool));
         }
 
         /// <summary>
@@ -193,10 +214,10 @@ namespace AniDownloaderTerminal
         }
 
         /// <summary>
-        /// Searches Nyaa for this series and returns releases that pass age, seeder, size, batch, and exclude-filter checks.
+        /// Searches Nyaa for this series and returns releases that pass age, seeder, size, batch, and filter checks.
         /// </summary>
         /// <remarks>
-        /// How it works: one RSS request is parsed into episode elements. A malformed item is logged and skipped. Filter excludes a matching title. An invalid filter fails this search instead of downloading every release.
+        /// How it works: one RSS request is parsed into episode elements. A malformed item is logged and skipped. The filter excludes a matching title when exclusive, or a non-matching title when inclusive. An invalid filter fails this search instead of downloading every release.
         /// </remarks>
         public async Task<OnlineEpisodeElement[]> GetAvailableSeriesEpisodes()
         {
@@ -227,7 +248,7 @@ namespace AniDownloaderTerminal
                 if (element.IsTooOld) continue;
                 if (element.IsTooNew) continue;
                 if (element.TooFewSeeders) continue;
-                if (ReleaseMatchesExcludeFilter(element)) continue;
+                if (ReleaseShouldBeExcludedByFilter(element)) continue;
                 if (Settings.ExcludeBatchReleases && element.Name.Contains("BATCH", StringComparison.InvariantCultureIgnoreCase)) continue; //Exclude batch releases if the setting is enabled
                 if (element.SizeMiB > Settings.MaxFileSizeMb)
                 {
@@ -247,15 +268,21 @@ namespace AniDownloaderTerminal
         }
 
         /// <summary>
-        /// Returns true when the exclude filter matches the release title.
+        /// Returns true when the filter should exclude this release.
+        /// Exclusive mode (default) excludes a matching title. Inclusive mode excludes a non-matching title. An empty filter never excludes.
         /// </summary>
-        private bool ReleaseMatchesExcludeFilter(OnlineEpisodeElement element)
+        private bool ReleaseShouldBeExcludedByFilter(OnlineEpisodeElement element)
         {
             if (string.IsNullOrWhiteSpace(Filter))
             {
                 return false;
             }
-            return Regex.IsMatch(element.Name, Filter);
+            bool matches = Regex.IsMatch(element.Name, Filter);
+            if (FilterIsInclusive)
+            {
+                return !matches;
+            }
+            return matches;
         }
 
         /// <summary>

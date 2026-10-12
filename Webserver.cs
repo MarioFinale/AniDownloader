@@ -203,6 +203,9 @@ namespace AniDownloaderTerminal
                                 case "Filter":
                                     paramsDic[paramID].Filter = paramVal;
                                     break;
+                                case "InclusiveFilter":
+                                    paramsDic[paramID].InclusiveFilter = paramVal;
+                                    break;
                                 default:
                                     break;
                             }
@@ -214,7 +217,7 @@ namespace AniDownloaderTerminal
                             Global.SeriesTable.Rows.Clear();
                             foreach (KeyValuePair<int, WebTable> pair in paramsDic)
                             {
-                                Global.SeriesTable.Rows.Add(pair.Value.Name, pair.Value.Path, pair.Value.Offset, pair.Value.Filter);
+                                Global.SeriesTable.Rows.Add(pair.Value.Name, pair.Value.Path, pair.Value.Offset, pair.Value.Filter, pair.Value.InclusiveFilter);
                             }
                             Global.SeriesTable.WriteXml(Global.SeriesTableFilePath, XmlWriteMode.WriteSchema);
                         }
@@ -336,6 +339,7 @@ namespace AniDownloaderTerminal
             public string Path = string.Empty;
             public string Offset = string.Empty;
             public string Filter = string.Empty;
+            public string InclusiveFilter = "False";
         }
 
         public void Init()
@@ -396,7 +400,17 @@ namespace AniDownloaderTerminal
                 html += $"<tr id=\"sr_{i}\">";
                 for (int j = 0; j < dt.Columns.Count; j++)
                 {
-                    html += $"<td><input style=\"width:105%; padding:inherit; box-sizing:border-box;\" type=\"text\" name=\"{dt.Columns[j].ColumnName}-{i}\" value=\"{dt.Rows[i][j]}\"/></td>";
+                    string columnName = dt.Columns[j].ColumnName;
+                    string cellValue = dt.Rows[i][j]?.ToString() ?? string.Empty;
+                    if (columnName == "InclusiveFilter")
+                    {
+                        string checkedAttribute = string.Equals(cellValue, "True", StringComparison.OrdinalIgnoreCase) ? " checked" : string.Empty;
+                        html += $"<td><input type=\"checkbox\" name=\"InclusiveFilter-{i}\" value=\"True\"{checkedAttribute}/></td>";
+                    }
+                    else
+                    {
+                        html += $"<td><input style=\"width:105%; padding:inherit; box-sizing:border-box;\" type=\"text\" name=\"{columnName}-{i}\" value=\"{cellValue}\"/></td>";
+                    }
                 }
 
                 html += $"<td><button id=\"del-{i}\" type=\"button\" onclick=\"deleteRow({i})\">x</button></td>";

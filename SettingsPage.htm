@@ -468,7 +468,7 @@
                 </form>
                 <div class="help-text">
                     <h6>Offset adds an offset value to the episode numbers.</h6>
-                    <h6>"Filter" is a Regular Expression that excludes matches.</h6>
+                    <h6>"Filter" is a Regular Expression. By default (Exclusive) it excludes matching titles. Check "InclusiveFilter" to keep only matching titles and exclude the rest.</h6>
                 </div>
             </div>
         </div>
@@ -686,6 +686,7 @@
  <td><input style=\"width:105%; padding:inherit; box-sizing:border-box;\" type=\"text\" name=\"Path-'+ rowNumber + '\" value=\"DefaultPath-replace\"/></td>\
  <td><input style=\"width:105%; padding:inherit; box-sizing:border-box;\" type=\"text\" name=\"Offset-'+ rowNumber + '\" value=\"0\"/></td>\
  <td><input style=\"width:105%; padding:inherit; box-sizing:border-box;\" type=\"text\" name=\"Filter-'+ rowNumber + '\" value=\"\"/></td>\
+ <td><input type=\"checkbox\" name=\"InclusiveFilter-'+ rowNumber + '\" value=\"True\"/></td>\
  <td><button id=\"del-' + rowNumber + '\" type=\"button\" class=\"btn-danger-sm\" onclick=\"deleteRow(' + rowNumber + ')\">x</button></td>\
     </tr>';
             tbody.innerHTML += element;

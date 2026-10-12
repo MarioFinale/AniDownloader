@@ -32,6 +32,8 @@ namespace AniDownloaderTerminal
         [GeneratedRegex(@"\d{1,3}$")]
         private static partial Regex TempFolderEpisodeNumberRegex();
 
+        private int _stoppingTorrents = 0;
+
         public static void Main(string[] args)
         {
             // Remote encoder mode: dotnet run -- --worker
@@ -61,6 +63,10 @@ namespace AniDownloaderTerminal
         public async Task Start()
         {
             Console.Clear();
+            AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
+            Console.CancelKeyPress += OnCancelKeyPress;
+
+            await CurrentSeriesDownloader.ResumeExistingTorrentsAsync();
 
             bool CleanFinishedSeriesTask()
             {
@@ -122,6 +128,38 @@ namespace AniDownloaderTerminal
             Global.TaskAdmin.NewTask("SearchForNeedConvertSeriesTask", "Downloader", SearchForUncompletedAndNeedConvertSeriesTask, 300000, true);
 
             await UpdateSeries();
+        }
+
+        /// <summary>
+        /// Flushes torrent fast-resume data when the process is exiting.
+        /// </summary>
+        private void OnProcessExit(object? sender, EventArgs e)
+        {
+            StopTorrentsOnExit();
+        }
+
+        /// <summary>
+        /// Flushes torrent fast-resume data on Ctrl+C before the process terminates.
+        /// </summary>
+        private void OnCancelKeyPress(object? sender, ConsoleCancelEventArgs e)
+        {
+            StopTorrentsOnExit();
+        }
+
+        /// <summary>
+        /// Stops every torrent once so a second exit signal does not start another flush.
+        /// </summary>
+        private void StopTorrentsOnExit()
+        {
+            if (Interlocked.Exchange(ref _stoppingTorrents, 1) == 1) return;
+            try
+            {
+                CurrentSeriesDownloader.StopAllTorrentsAsync().GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                Global.TaskAdmin.Logger.EX_Log(ex.Message, "StopTorrentsOnExit");
+            }
         }
 
         /// 
@@ -250,13 +288,19 @@ namespace AniDownloaderTerminal
                             string? sName = row["Name"].ToString();
                             string? sPath = row["Path"].ToString();
                             string? sFilter = row["Filter"].ToString();
+                            bool filterIsInclusive = false;
+                            if (row.Table.Columns.Contains("InclusiveFilter"))
+                            {
+                                string? inclusiveText = row["InclusiveFilter"]?.ToString();
+                                filterIsInclusive = string.Equals(inclusiveText, "True", StringComparison.OrdinalIgnoreCase);
+                            }
                             _ = int.TryParse(row["Offset"].ToString(), out int sOffset);
 
                             if (sName == null) { continue; }
                             if (sPath == null) { continue; }
                             if (sFilter == null) { continue; }
                             if (!Directory.Exists(sPath)) Directory.CreateDirectory(sPath);
-                            Series series = new(sName, sPath, sOffset, sFilter);
+                            Series series = new(sName, sPath, sOffset, sFilter, filterIsInclusive);
                             seriesInTable.Add(series);
                         }
                     }
@@ -824,7 +868,7 @@ namespace AniDownloaderTerminal
                 if (episodes.Contains(episodeName))
                     continue; // already tracked locally
 
-                string status = $"Remote [{claim.WorkerId}] {claim.Status}";
+                string status = FormatWorkerStatus(claim.WorkerId, claim.Status);
                 string progress = claim.Progress.ToString("0.##");
                 lock (Global.CurrentStatusTable)
                 {
@@ -871,6 +915,19 @@ namespace AniDownloaderTerminal
             string html = Webserver.ConvertStatusDataTableToHTML(Global.CurrentStatusTable);
             if (!string.IsNullOrEmpty(html)) Global.PublishStatusHtmlSnapshot(html);
 
+        }
+
+        /// <summary>
+        /// Formats a worker status for the status table. When the encoder matches the main
+        /// instance (this process's worker id), only the status is shown. Remote workers are
+        /// prefixed with Remote [workerId].
+        /// </summary>
+        private static string FormatWorkerStatus(string workerId, string status)
+        {
+            string localId = EncodingClaim.GetLocalWorkerId();
+            if (string.Equals(workerId, localId, StringComparison.OrdinalIgnoreCase))
+                return status;
+            return $"Remote [{workerId}] {status}";
         }
 
         private static void OverrideStatusTableWithWorkersData()
@@ -929,7 +986,7 @@ namespace AniDownloaderTerminal
 
                             if (string.Equals(value.Trim(), episodeName.Trim(), StringComparison.OrdinalIgnoreCase))
                             {
-                                row.SetField("Status", $"Remote [{workerID}] {status}");
+                                row.SetField("Status", FormatWorkerStatus(workerID, status));
                                 row.SetField("Progress", progress);
                             }
                         }
@@ -1093,7 +1150,21 @@ namespace AniDownloaderTerminal
                         DataColumn Filter = new("Filter", typeof(string));
                         Global.SeriesTable.Columns.Add(Filter);
                     }
+
+                    if (!Global.SeriesTable.Columns.Contains("InclusiveFilter"))
+                    {
+                        DataColumn InclusiveFilter = new("InclusiveFilter", typeof(string));
+                        Global.SeriesTable.Columns.Add(InclusiveFilter);
+                    }
                }                         
+            }
+            lock (Global.SeriesTable)
+            {
+                if (!Global.SeriesTable.Columns.Contains("InclusiveFilter"))
+                {
+                    DataColumn InclusiveFilter = new("InclusiveFilter", typeof(string));
+                    Global.SeriesTable.Columns.Add(InclusiveFilter);
+                }
             }
             lock (Global.CurrentStatusTable)
             {
