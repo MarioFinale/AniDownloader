@@ -6,6 +6,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using static AniDownloaderTerminal.SeriesDownloader;
 using static AniDownloaderTerminal.SeriesDownloader.EpisodeToDownload;
 
 
@@ -50,7 +51,7 @@ namespace AniDownloaderTerminal
             settings.Init();
             Program program = new();
             webserver.Init();            
-            var task = Task.Run(async () => { await program.Start(); });
+            Task task = Task.Run(async () => { await program.Start(); });
             task.Wait();
         }
 
@@ -250,8 +251,8 @@ namespace AniDownloaderTerminal
                     foreach ((string name, string path) row in rowsToDelete)
                     {
                         // Use Select for efficient lookup; escapes apostrophes in queries.
-                        var matchingRows = Global.SeriesTable.Select($"Name = '{row.name.Replace("'", "''")}' AND Path = '{row.path.Replace("'", "''")}'");
-                        foreach (var r in matchingRows)
+                        DataRow[]? matchingRows = Global.SeriesTable.Select($"Name = '{row.name.Replace("'", "''")}' AND Path = '{row.path.Replace("'", "''")}'");
+                        foreach (DataRow r in matchingRows)
                         {
                             r.Delete();
                         }
@@ -713,7 +714,7 @@ namespace AniDownloaderTerminal
 
         private void AddEpisode(string episodeName, string seriesPath, int episodeNumber, State state, string status)
         {
-            var episode = new SeriesDownloader.EpisodeToDownload("", episodeName, seriesPath, episodeNumber);
+            EpisodeToDownload episode = new("", episodeName, seriesPath, episodeNumber);
             episode.SetState(state);
             episode.StatusDescription = status;
             CurrentSeriesDownloader.AddFoundEpisodeToDictionary(episode);
@@ -1036,26 +1037,26 @@ namespace AniDownloaderTerminal
 
         private static string GetCurrentOpsString()
         {
-            var queue = Global.CurrentOpsQueue;
+            ConcurrentQueue<string> queue = Global.CurrentOpsQueue;
             if (queue.Count > 5)
             {
                 while (queue.Count > 1)
                 {
                     queue.TryDequeue(out _);
                 }
-                queue.TryPeek(out var result);
+                queue.TryPeek(out string? result);
                 return result ?? String.Empty;
             }
             else
             {
                 if (queue.Count < 2)
                 {
-                    queue.TryPeek(out var result);
+                    queue.TryPeek(out string? result);
                     return result ?? String.Empty;
                 }
                 else
                 {
-                    queue.TryDequeue(out var result);
+                    queue.TryDequeue(out string? result);
                     return result ?? String.Empty;
                 }
             }
