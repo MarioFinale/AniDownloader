@@ -13,7 +13,7 @@ Readable and maintainable code is preferred over clever or compact code. If a sh
         Field names should be descriptive and specific (e.g., lastNyaaRequestTime instead of LastNyaaRequest).
     Methods: Use PascalCase for method names (e.g., StartDownloads, PrintUpdateTable). Method names should start with a verb and clearly describe the action performed.
     Properties: Use PascalCase and name according to what they represent or return (e.g., CurrentStatus).
-    Prefer explicit names over abbreviations. A reader should not have to expand a name to know what it does. Prefer StartDownloads, PauseSeries, RequireValidSettings, SelectUncensoredEpisode over sd, ps, chk, or epSel. The same rule applies outside this project: completeSale, pauseTicket, and requireAdmin are better than cmpSale, pTkt, and reqAdm.
+    Prefer explicit names over abbreviations. A reader should not have to expand a name to know what it does. Prefer StartDownloads, PauseSeries, RequireValidSettings, SelectUncensoredEpisode over sd, ps, chk, or epSel.
     Avoid acronyms unless they are already the domain term used in this codebase (for example HTTP, XML, MKV). If an abbreviation is kept, it must be used consistently.
 
 2. Method Structure and Organization
@@ -40,7 +40,7 @@ Readable and maintainable code is preferred over clever or compact code. If a sh
 
     Try-Catch Blocks: Use try-catch around code prone to exceptions, such as network calls or file operations (e.g., GetWebDataFromUrl, LoadSeriesTable).
     Logging Errors: Log exceptions with sufficient context (method name and error message) using Global.TaskAdmin.Logger.EX_Log.
-    Fail Gracefully: Ensure the program continues operation where possible, even after an exception. Where not possible, notify the user and terminate gracefully.
+    Fail Gracefully: Ensure the program continues operation where possible, even after an exception. Where not possible: log the errror, notify the user and terminate gracefully.
     Handle failures explicitly. Do not swallow exceptions. An empty catch, a catch that only returns a default, or a catch that logs and continues without recording the failed item is not acceptable.
     Name the failure and the next action. Typical cases in this project:
         Data load and save errors: SeriesData.xml read/write failures, DataTable schema mismatches, and corrupt or partial XML. Do not continue with an empty series table as if the load succeeded.
@@ -111,10 +111,12 @@ Readable and maintainable code is preferred over clever or compact code. If a sh
 
 13. Explicit Types
 
-    Always use explicit types. Write List<OnlineEpisodeElement> episodes, not var episodes.
+    Always use explicit types. Write "List<OnlineEpisodeElement> episodes", not "var episodes".
     Do not use var for locals, foreach variables, or LINQ query results.
+    Prefer single-line if statements when only a single action is performed.
     The exception is where an explicit type is impractical, such as an anonymous object created for JSON. Even then, prefer object over var when the value is stored.
     Anonymous JSON payloads should be built at the edge that serializes them, not passed through the rest of the program as var.
     Use the concrete collection type you intend to keep (List<T>, Dictionary<TKey, TValue>, DataTable) rather than an inferred result type.
+
 
 By following this style guide, contributions to AniDownloader will be consistent, modular, and maintainable. The focus on asynchronous design, modular task handling, and clear logging will keep the program efficient and manageable for continuous execution in a terminal or daemon context.

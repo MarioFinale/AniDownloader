@@ -24,6 +24,15 @@ namespace AniDownloaderTerminal
         /// </summary>
         public static string StatusHtmlSnapshot { get; private set; } = string.Empty;
         private static readonly object StatusHtmlSnapshotLock = new();
+        
+        private static DateTime LastRequestTime;
+
+        private static readonly HttpClient HttpClient = CreateHttpClient();
+
+
+        public static readonly TaskAdmin.Utility.TaskAdmin TaskAdmin = new();
+        public static readonly ConcurrentQueue<string> CurrentOpsQueue = new();
+        public static AnilistMetadataProvider MetadataProvider = new();
 
         public static void PublishStatusHtmlSnapshot(string html)
         {
@@ -40,16 +49,7 @@ namespace AniDownloaderTerminal
                 return StatusHtmlSnapshot;
             }
         }
-
-        private static DateTime LastRequestTime;
-
-        private static readonly HttpClient httpClient = CreateHttpClient();
-
-
-        public static readonly TaskAdmin.Utility.TaskAdmin TaskAdmin = new();
-        public static readonly ConcurrentQueue<string> CurrentOpsQueue = new();
-        public static AnilistMetadataProvider MetadataProvider = new();
-
+        
         private static HttpClient CreateHttpClient()
         {
             HttpClient client = (new HttpClient { Timeout = TimeSpan.FromSeconds(60) });
@@ -74,7 +74,7 @@ namespace AniDownloaderTerminal
             try
             {
                 await DelayAsync();
-                using HttpResponseMessage response = await httpClient.GetAsync(url);
+                using HttpResponseMessage response = await HttpClient.GetAsync(url);
                 response.EnsureSuccessStatusCode();
                 return await operation(response);
             }
@@ -90,7 +90,7 @@ namespace AniDownloaderTerminal
             try
             {
                 await DelayAsync();
-                using HttpResponseMessage response = await httpClient.PostAsync(url, content);
+                using HttpResponseMessage response = await HttpClient.PostAsync(url, content);
                 response.EnsureSuccessStatusCode();
                 return await operation(response);
             }

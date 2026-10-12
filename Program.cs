@@ -14,21 +14,21 @@ namespace AniDownloaderTerminal
 {
     public partial class Program
     {
-        private string CurrentlyScanningSeries = string.Empty;
-        private readonly SeriesDownloader CurrentSeriesDownloader = new();
+        private string _currentlyScanningSeries = string.Empty;
+        private readonly SeriesDownloader _currentSeriesDownloader = new();
 
-        private int PreviousLineCount = 0;
-        private int PreviousWindowHeight = 0;
-        private int PreviousWindowWidth = 0;
+        private int _previousLineCount = 0;
+        private int _previousWindowHeight = 0;
+        private int _previousWindowWidth = 0;
 
         // Cached remote worker claims so the 200ms UI refresh does not walk the
         // filesystem every tick. Refreshed at most every WorkerClaimRefreshMs.
         private List<EncodingClaim> _cachedRemoteClaims = [];
         private DateTime _lastRemoteClaimScanUtc = DateTime.MinValue;
-        private readonly object _remoteClaimsLock = new();
+        private readonly Lock _remoteClaimsLock = new();
 
-        public static readonly Settings settings = new();
-        public static readonly Webserver webserver = new();
+        public static readonly Settings Settings = new();
+        public static readonly Webserver Webserver = new();
 
         [GeneratedRegex(@"\d{1,3}$")]
         private static partial Regex TempFolderEpisodeNumberRegex();
@@ -48,9 +48,9 @@ namespace AniDownloaderTerminal
                 return;
             }
 
-            settings.Init();
+            Settings.Init();
             Program program = new();
-            webserver.Init();            
+            Webserver.Init();            
             Task task = Task.Run(async () => { await program.Start(); });
             task.Wait();
         }
@@ -67,68 +67,64 @@ namespace AniDownloaderTerminal
             AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
             Console.CancelKeyPress += OnCancelKeyPress;
 
-            await CurrentSeriesDownloader.ResumeExistingTorrentsAsync();
+            await _currentSeriesDownloader.ResumeExistingTorrentsAsync();
 
+
+
+            Global.TaskAdmin.NewTask("CleanFinishedSeries", "Downloader", CleanFinishedSeriesTask, 300000, true);
+            Global.TaskAdmin.NewTask("StartDownloads", "Downloader", StartDownloadsTask, 1000, true);
+            Global.TaskAdmin.NewTask("StartConversions", "Downloader", StartConversionsTask, 2000, true);
+            Global.TaskAdmin.NewTask("CleanEncodedFiles", "Downloader", CleanEncodedFilesTask, 10000, true);
+            Global.TaskAdmin.NewTask("UpdateSeriesDataTable", "Downloader", UpdateSeriesDataTableTask, 200, true);
+            Global.TaskAdmin.NewTask("PrintUpdateTable", "Downloader", PrintUpdateTableTask, 100, true);
+            Global.TaskAdmin.NewTask("SearchForNeedConvertSeriesTask", "Downloader", SearchForUncompletedAndNeedConvertSeriesTask, 300000, true);
+
+            await UpdateSeries();
+            return;
+            ;
+            
             bool CleanFinishedSeriesTask()
             {
                 CleanFinishedSeries();
                 return true;
             }
-
-            Global.TaskAdmin.NewTask("CleanFinishedSeries", "Downloader", CleanFinishedSeriesTask, 300000, true);
-
-
+            
             bool StartDownloadsTask()
             {
-                Thread.Sleep(5000);//Delay so it doesn't crash with CleanFinishedSeriesTask at the beggining.
-                CurrentSeriesDownloader.StartDownloads();
+                Thread.Sleep(5000);//Delay so it doesn't crash with CleanFinishedSeriesTask at the beginning.
+                _currentSeriesDownloader.StartDownloads();
                 return true;
             }
-
-            Global.TaskAdmin.NewTask("StartDownloads", "Downloader", StartDownloadsTask, 1000, true);
-
-
-            bool StartConversionsTask()
-            {
-                CurrentSeriesDownloader.StartConversions();
-                return true;
-            }
-
-            Global.TaskAdmin.NewTask("StartConvertions", "Downloader", StartConversionsTask, 2000, true);
-
-
-            bool CleanEncodedFilesTask()
-            {
-                CurrentSeriesDownloader.CleanEncodedFiles();
-                return true;
-            };
-
-            Global.TaskAdmin.NewTask("CleanEncodedFiles", "Downloader", CleanEncodedFilesTask, 10000, true);
-
-            bool UpdateSeriesDataTableTask()
-            {
-                UpdateSeriesDataTable();
-                return true;
-            };
-
-            Global.TaskAdmin.NewTask("UpdateSeriesDataTable", "Downloader", UpdateSeriesDataTableTask, 200, true);
-
 
             bool PrintUpdateTableTask()
             {
                 PrintUpdateTable();
                 return true;
-            };
-            Global.TaskAdmin.NewTask("PrintUpdateTable", "Downloader", PrintUpdateTableTask, 100, true);
+            }
+            
+            bool StartConversionsTask()
+            {
+                _currentSeriesDownloader.StartConversions();
+                return true;
+            }
+            
+            bool CleanEncodedFilesTask()
+            {
+                _currentSeriesDownloader.CleanEncodedFiles();
+                return true;
+            }
 
             bool SearchForUncompletedAndNeedConvertSeriesTask()
             {
                 SearchForUncompletedAndNeedConvertSeries();
                 return true;
             }
-            Global.TaskAdmin.NewTask("SearchForNeedConvertSeriesTask", "Downloader", SearchForUncompletedAndNeedConvertSeriesTask, 300000, true);
 
-            await UpdateSeries();
+            bool UpdateSeriesDataTableTask()
+            {
+                UpdateSeriesDataTable();
+                return true;
+            }
         }
 
         /// <summary>
@@ -155,7 +151,7 @@ namespace AniDownloaderTerminal
             if (Interlocked.Exchange(ref _stoppingTorrents, 1) == 1) return;
             try
             {
-                CurrentSeriesDownloader.StopAllTorrentsAsync().GetAwaiter().GetResult();
+                _currentSeriesDownloader.StopAllTorrentsAsync().GetAwaiter().GetResult();
             }
             catch (Exception ex)
             {
@@ -193,11 +189,11 @@ namespace AniDownloaderTerminal
                 {
                     if (!Directory.Exists(row.path)) continue; // Directory cannot be accessed, skip.
 
-                    // This program stores the episode names as 'SeriesName {episode}.ext' although the path can be specified by the user. We enforce flat directories.
+                    // The program stores the episode names as 'SeriesName {episode}.ext' although the path can be specified by the user. We enforce flat directories.
                     // We use MKV as video container but there is the possibility the user manually downloaded some episodes so we should look for valid extensions specified in the settings.
-                    int fileCount = Directory.EnumerateFiles(row.path, row.name + "*.*")
-                                             .Where(f => Settings.ValidExtensions.Select(x => x.ToLowerInvariant()).ToHashSet().Contains(Path.GetExtension(f).ToLowerInvariant()))
-                                             .Count();
+                    int fileCount = Directory
+                        .EnumerateFiles(row.path, row.name + "*.*")
+                        .Count(f => Settings.ValidExtensions.Select(x => x.ToLowerInvariant()).ToHashSet().Contains(Path.GetExtension(f).ToLowerInvariant()));
 
                     if (fileCount == 0) continue; // New Series, don't bother to waste resources on querying.
 
@@ -308,7 +304,7 @@ namespace AniDownloaderTerminal
 
                     foreach (Series series in seriesInTable)
                     {
-                        CurrentlyScanningSeries = "Scanning : " + series.Name;
+                        _currentlyScanningSeries = "Scanning : " + series.Name;
                         OnlineEpisodeElement[] filteredEpisodes = FilterFoundEpisodes(await series.GetAvailableSeriesEpisodes(), series);
 
                         foreach (OnlineEpisodeElement episodeToDownload in filteredEpisodes)
@@ -316,15 +312,15 @@ namespace AniDownloaderTerminal
                             if (episodeToDownload.ProbableEpNumber == null) continue;
                             int episodeNumber = (int)episodeToDownload.ProbableEpNumber;
                             string episodeName = series.Name + " " + episodeNumber.ToString("00");
-                            if (CurrentSeriesDownloader.Episodes.ContainsKey(episodeName)) continue;
-                            CurrentSeriesDownloader.AddTorrentToDictionary(episodeToDownload.TorrentUrl, series.Path, episodeName, episodeNumber);
+                            if (_currentSeriesDownloader.Episodes.ContainsKey(episodeName)) continue;
+                            _currentSeriesDownloader.AddTorrentToDictionary(episodeToDownload.TorrentUrl, series.Path, episodeName, episodeNumber);
                         }
                     }                      
                     seriesInTable.Clear();
 
                     await Task.Run(() =>
                     {
-                        CurrentlyScanningSeries = "Done scanning!";
+                        _currentlyScanningSeries = "Done scanning!";
                         Thread.Sleep(1800000); //Task.Delay() causes a memory leak. It's only one thread so blocking it it's okay.
                     });
                     LoadSeriesTable();
@@ -546,7 +542,7 @@ namespace AniDownloaderTerminal
                 {
                     // Skip anything that is already being tracked or that lives under a temp dir
                     string episodeNameCandidate = Path.GetFileNameWithoutExtension(file).Trim();
-                    if (CurrentSeriesDownloader.Episodes.ContainsKey(episodeNameCandidate))
+                    if (_currentSeriesDownloader.Episodes.ContainsKey(episodeNameCandidate))
                         continue;
 
                     // Fast path: a valid .h264ok marker means we already probed this exact
@@ -648,7 +644,7 @@ namespace AniDownloaderTerminal
                 if (!tempFolderMatch.Success) continue;
                 if (!int.TryParse(tempFolderMatch.Value, out int episodeNumber)) continue; //Value can not be null because we guarded against match success.
                 // Skip if episode is already being tracked in the current downloader
-                if (CurrentSeriesDownloader.Episodes.ContainsKey(episodeName)) continue;
+                if (_currentSeriesDownloader.Episodes.ContainsKey(episodeName)) continue;
                 // Check for episode states to determine if it's downloaded or encoded
                 if (File.Exists(Path.Combine(tempDirPath, "state.DownloadedSeeding")) ||
                     File.Exists(Path.Combine(tempDirPath, "state.ReEncoding")))
@@ -717,7 +713,7 @@ namespace AniDownloaderTerminal
             EpisodeToDownload episode = new("", episodeName, seriesPath, episodeNumber);
             episode.SetState(state);
             episode.StatusDescription = status;
-            CurrentSeriesDownloader.AddFoundEpisodeToDictionary(episode);
+            _currentSeriesDownloader.AddFoundEpisodeToDictionary(episode);
         }
 
         private static OnlineEpisodeElement[] FilterFoundEpisodes(OnlineEpisodeElement[] episodes, Series series)
@@ -837,9 +833,9 @@ namespace AniDownloaderTerminal
         {
             List<string> episodes = [];
             
-            lock (CurrentSeriesDownloader.Episodes)
+            lock (_currentSeriesDownloader.Episodes)
             {
-                foreach (KeyValuePair<string, SeriesDownloader.EpisodeToDownload> pair in CurrentSeriesDownloader.Episodes)
+                foreach (KeyValuePair<string, SeriesDownloader.EpisodeToDownload> pair in _currentSeriesDownloader.Episodes)
                 {
                     SeriesDownloader.EpisodeToDownload episode = pair.Value;
                     SetUpdateEpisodesStatusTable(episode);
@@ -1032,7 +1028,7 @@ namespace AniDownloaderTerminal
 
         private string PrepareCurrentSeries(string consoleText)
         {
-            return MatchStringLenghtWithSpaces(CurrentlyScanningSeries, consoleText.Split('\n')[0]);
+            return MatchStringLenghtWithSpaces(_currentlyScanningSeries, consoleText.Split('\n')[0]);
         }
 
         private static string GetCurrentOpsString()
@@ -1065,16 +1061,16 @@ namespace AniDownloaderTerminal
         private bool ShouldUpdateConsole(string consoleText)
         {
             int currentLineCount = consoleText.Split('\n').Length;
-            return currentLineCount != PreviousLineCount ||
-                   Console.BufferWidth != PreviousWindowWidth ||
-                   Console.BufferHeight != PreviousWindowHeight;
+            return currentLineCount != _previousLineCount ||
+                   Console.BufferWidth != _previousWindowWidth ||
+                   Console.BufferHeight != _previousWindowHeight;
         }
 
         private string UpdateConsole(string consoleText)
         {
-            PreviousLineCount = consoleText.Split('\n').Length;
-            PreviousWindowHeight = Console.BufferHeight;
-            PreviousWindowWidth = Console.BufferWidth;
+            _previousLineCount = consoleText.Split('\n').Length;
+            _previousWindowHeight = Console.BufferHeight;
+            _previousWindowWidth = Console.BufferWidth;
             try
             {
                 Console.Clear();

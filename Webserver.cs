@@ -236,7 +236,7 @@ namespace AniDownloaderTerminal
                     string text = reader.ReadToEnd();
                     string[] webParams = [.. text.Split("&").Select(x => System.Web.HttpUtility.UrlDecode(x))];
                     File.WriteAllLines(Global.SettingsPath, webParams);
-                    Program.settings.LoadAndValidateSettingsFile();
+                    Program.Settings.LoadAndValidateSettingsFile();
                 }
 
 
