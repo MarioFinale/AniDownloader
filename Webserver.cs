@@ -156,6 +156,18 @@ namespace AniDownloaderTerminal
                     continue;
                 }
 
+                if (path == "/logs")
+                {
+                    responseData = ConvertLatestLogsToHTML(200);
+                    byte[] logBytes = Encoding.UTF8.GetBytes(responseData);
+                    resp.ContentType = "text/html";
+                    resp.ContentEncoding = Encoding.UTF8;
+                    resp.ContentLength64 = logBytes.LongLength;
+                    await resp.OutputStream.WriteAsync(logBytes);
+                    resp.Close();
+                    continue;
+                }
+
                 if (path == "/style.css")
                 {
                     responseData = File.ReadAllText(Path.Join(Global.Exepath, "style.css"));
@@ -247,6 +259,7 @@ namespace AniDownloaderTerminal
                 pageData = pageData.Replace("TooFewSeeders-replace", Settings.TooFewSeeders.ToString());
                 pageData = pageData.Replace("TooOldDays-replace", Settings.TooOldDays.ToString());
                 pageData = pageData.Replace("TooNewMinutes-replace", Settings.TooNewMinutes.ToString());
+                pageData = pageData.Replace("QualityOverrideHours-replace", Settings.QualityOverrideHours.ToString());
                 pageData = pageData.Replace("SeedingTimeHours-replace", Settings.SeedingTimeHours.ToString());
                 pageData = pageData.Replace("WebserverPort-replace", Settings.WebserverPort.ToString().Replace("\"", "\\\""));
                 pageData = pageData.Replace("SeedingRatio-replace", Settings.SeedingRatio.ToString().Replace("\"", "\\\""));
@@ -290,6 +303,36 @@ namespace AniDownloaderTerminal
                     pageData = pageData.Replace("<!--UseTranscodingHWAccelTrueSelected-->", "");
                     pageData = pageData.Replace("<!--UseTranscodingHWAccelFalseSelected-->", "selected");
                 }
+                if (Settings.EnableExistingVideoScanAndOptimize)
+                {
+                    pageData = pageData.Replace("<!--EnableExistingVideoScanAndOptimizeTrueSelected-->", "selected");
+                    pageData = pageData.Replace("<!--EnableExistingVideoScanAndOptimizeFalseSelected-->", "");
+                }
+                else
+                {
+                    pageData = pageData.Replace("<!--EnableExistingVideoScanAndOptimizeTrueSelected-->", "");
+                    pageData = pageData.Replace("<!--EnableExistingVideoScanAndOptimizeFalseSelected-->", "selected");
+                }
+                string preferredCodec = Settings.PreferredVideoCodec?.Trim().ToLowerInvariant() ?? "h264";
+                if (preferredCodec == "hevc" || preferredCodec == "h265")
+                {
+                    pageData = pageData.Replace("<!--PreferredVideoCodecHevcSelected-->", "selected");
+                    pageData = pageData.Replace("<!--PreferredVideoCodecH264Selected-->", "");
+                }
+                else
+                {
+                    pageData = pageData.Replace("<!--PreferredVideoCodecH264Selected-->", "selected");
+                    pageData = pageData.Replace("<!--PreferredVideoCodecHevcSelected-->", "");
+                }
+
+                string minimumQuality = Settings.NormalizeMinimumDownloadQuality(Settings.MinimumDownloadQuality);
+                pageData = pageData.Replace("<!--MinimumDownloadQualityLt480Selected-->", minimumQuality == "<480p" ? "selected" : "");
+                pageData = pageData.Replace("<!--MinimumDownloadQuality480Selected-->", minimumQuality == "480p" ? "selected" : "");
+                pageData = pageData.Replace("<!--MinimumDownloadQuality720Selected-->", minimumQuality == "720p" ? "selected" : "");
+                pageData = pageData.Replace("<!--MinimumDownloadQuality1080Selected-->", minimumQuality == "1080p" ? "selected" : "");
+                pageData = pageData.Replace("<!--MinimumDownloadQuality2KSelected-->", minimumQuality == "2K" ? "selected" : "");
+                pageData = pageData.Replace("<!--MinimumDownloadQuality4KSelected-->", minimumQuality == "4K" ? "selected" : "");
+
                 if (Settings.UseCustomLanguage)
                 {
                     pageData = pageData.Replace("<!--UseCustomLanguageTrueSelected-->", "selected");
@@ -455,6 +498,56 @@ namespace AniDownloaderTerminal
             }
             return sb.ToString();
         }
+
+        /// <summary>
+        /// Builds HTML table rows for the most recent log entries (newest first).
+        /// Used by the web UI Logs tab. Takes a short lock only long enough to snapshot the in-memory list.
+        /// </summary>
+        /// <param name="maxEntries">Maximum number of newest entries to return.</param>
+        /// <returns>HTML table-row fragments ready for insertion into a tbody.</returns>
+        public static string ConvertLatestLogsToHTML(int maxEntries = 200)
+        {
+            TaskAdmin.Utility.SimpleLogger logger = Global.TaskAdmin.Logger;
+            List<string[]> snapshot;
+            bool lockTaken = false;
+            try
+            {
+                System.Threading.Monitor.TryEnter(logger.Logdata, 50, ref lockTaken);
+                if (!lockTaken)
+                    return string.Empty;
+                snapshot = new List<string[]>(logger.Logdata);
+            }
+            finally
+            {
+                if (lockTaken)
+                    System.Threading.Monitor.Exit(logger.Logdata);
+            }
+
+            int startIndex = Math.Max(0, snapshot.Count - maxEntries);
+            StringBuilder sb = new StringBuilder(Math.Min(snapshot.Count, maxEntries) * 160);
+
+            // Newest first
+            for (int i = snapshot.Count - 1; i >= startIndex; i--)
+            {
+                string[] entry = snapshot[i];
+                if (entry == null || entry.Length < 5)
+                    continue;
+
+                string time = entry[0] ?? string.Empty;
+                string message = entry[1] ?? string.Empty;
+                string source = entry[2] ?? string.Empty;
+                string type = entry[4] ?? string.Empty;
+
+                sb.Append("<tr>");
+                sb.Append("<td>").Append(System.Net.WebUtility.HtmlEncode(time)).Append("</td>");
+                sb.Append("<td>").Append(System.Net.WebUtility.HtmlEncode(type)).Append("</td>");
+                sb.Append("<td>").Append(System.Net.WebUtility.HtmlEncode(source)).Append("</td>");
+                sb.Append("<td style=\"text-align:left; white-space:pre-wrap;\">").Append(System.Net.WebUtility.HtmlEncode(message)).Append("</td>");
+                sb.Append("</tr>");
+            }
+            return sb.ToString();
+        }
+
     }
 
 }

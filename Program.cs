@@ -397,7 +397,10 @@ namespace AniDownloaderTerminal
                     continue;
                 }
                 SearchAndProcessDirectoryMarker(row.name, row.path);
-                SearchAndProcessNonH264Videos(row.name, row.path);
+                if (Settings.EnableExistingVideoScanAndOptimize)
+                {
+                    SearchAndProcessNonH264Videos(row.name, row.path);
+                }
                 SearchAndProcessUncompleted(row.path);
             }
 
@@ -517,14 +520,19 @@ namespace AniDownloaderTerminal
         }
 
         /// <summary>
-        /// Scans a series directory for video files that are not H.264 (or that cannot be probed)
-        /// and queues them for conversion using the same rename-to-canonical-name logic as the
-        /// .needsconvert marker routine. This keeps final filenames consistent with the rest of
-        /// the downloader (SeriesName 01.ext, SeriesName 02.ext, ...).
+        /// Scans a series directory for video files that are not already in the preferred codec
+        /// (or that cannot be probed) and queues them for conversion using the same
+        /// rename-to-canonical-name logic as the .needsconvert marker routine. This keeps final
+        /// filenames consistent with the rest of the downloader (SeriesName 01.ext, SeriesName 02.ext, ...).
         /// Files already inside a .temp folder or already tracked are skipped.
+        /// When Settings.EnableExistingVideoScanAndOptimize is false the method returns immediately
+        /// and does not probe or write verification markers.
         /// </summary>
         public void SearchAndProcessNonH264Videos(string seriesName, string seriesPath)
         {
+            if (!Settings.EnableExistingVideoScanAndOptimize)
+                return;
+
             if (string.IsNullOrWhiteSpace(seriesName) || !Directory.Exists(seriesPath))
                 return;
 
@@ -545,25 +553,25 @@ namespace AniDownloaderTerminal
                     if (_currentSeriesDownloader.Episodes.ContainsKey(episodeNameCandidate))
                         continue;
 
-                    // Fast path: a valid .h264ok marker means we already probed this exact
-                    // file (same size + mtime) and confirmed it is H.264. Skip the expensive
-                    // ffprobe call on every 5-minute scan cycle.
-                    if (SeriesDownloader.IsFileVerifiedH264(file))
+                    // Fast path: a valid verification marker means we already probed this exact
+                    // file (same size + mtime) and confirmed it uses the preferred codec. Skip the
+                    // expensive ffprobe call on every 5-minute scan cycle.
+                    if (SeriesDownloader.IsFileVerifiedPreferredCodec(file))
                         continue;
 
-                    // Probe codec – only process when it is NOT h264 (or probe failed).
+                    // Probe codec – only process when it is NOT the preferred codec (or probe failed).
                     // On first successful confirmation we write the marker so later cycles
                     // can take the fast path above.
-                    if (SeriesDownloader.IsH264Video(file))
+                    if (SeriesDownloader.IsPreferredCodecVideo(file))
                     {
-                        SeriesDownloader.MarkFileAsVerifiedH264(file);
+                        SeriesDownloader.MarkFileAsVerifiedPreferredCodec(file);
                         continue;
                     }
 
                     int? episodeNumber = OnlineEpisodeElement.GetEpNumberFromString(episodeNameCandidate);
                     if (episodeNumber == null)
                     {
-                        Global.TaskAdmin.Logger.Log($"Skipped non-H264 '{file}'. No episode number found.", "SearchAndProcessNonH264Videos");
+                        Global.TaskAdmin.Logger.Log($"Skipped non-preferred-codec '{file}'. No episode number found.", "SearchAndProcessNonH264Videos");
                         continue;
                     }
 
@@ -579,15 +587,15 @@ namespace AniDownloaderTerminal
                     string tempFolder = Path.Combine(seriesPath, destEpisodeName) + ".temp";
                     string destEpisodePath = Path.Combine(tempFolder, destEpisodeName + destEpisodeExtension);
 
-                    // If a final file with the canonical name already exists and is itself H.264 we
-                    // leave the original alone; otherwise we still move & re-encode.
+                    // If a final file with the canonical name already exists and is itself the preferred
+                    // codec we leave the original alone; otherwise we still move & re-encode.
                     string possibleFinal = Path.Combine(seriesPath, destEpisodeName + destEpisodeExtension);
                     if (File.Exists(possibleFinal))
                     {
-                        if (SeriesDownloader.IsFileVerifiedH264(possibleFinal) || SeriesDownloader.IsH264Video(possibleFinal))
+                        if (SeriesDownloader.IsFileVerifiedPreferredCodec(possibleFinal) || SeriesDownloader.IsPreferredCodecVideo(possibleFinal))
                         {
-                            if (!SeriesDownloader.IsFileVerifiedH264(possibleFinal))
-                                SeriesDownloader.MarkFileAsVerifiedH264(possibleFinal);
+                            if (!SeriesDownloader.IsFileVerifiedPreferredCodec(possibleFinal))
+                                SeriesDownloader.MarkFileAsVerifiedPreferredCodec(possibleFinal);
                             // There is already a good final file; skip this source to avoid unnecessary work.
                             continue;
                         }
@@ -620,12 +628,12 @@ namespace AniDownloaderTerminal
 
                 if (queuedCount > 0)
                 {
-                    Global.TaskAdmin.Logger.Log($"Queued {queuedCount} non-H264 file(s) in '{seriesPath}' for Series '{seriesName}'.", "SearchAndProcessNonH264Videos");
+                    Global.TaskAdmin.Logger.Log($"Queued {queuedCount} non-preferred-codec file(s) in '{seriesPath}' for Series '{seriesName}'.", "SearchAndProcessNonH264Videos");
                 }
             }
             catch (Exception ex)
             {
-                Global.TaskAdmin.Logger.EX_Log($"Error processing non-H264 videos in '{seriesPath}': {ex.Message}", "SearchAndProcessNonH264Videos");
+                Global.TaskAdmin.Logger.EX_Log($"Error processing non-preferred-codec videos in '{seriesPath}': {ex.Message}", "SearchAndProcessNonH264Videos");
                 Global.TaskAdmin.Logger.Debug_Log(ex.StackTrace, "SearchAndProcessNonH264Videos");
             }
         }

@@ -141,6 +141,7 @@ namespace AniDownloaderTerminal
 
             // Local path keeps TorrentName non-empty so ratio/time cleanup still applies.
             EpisodeToDownload episode = new(torrentFilePath, episodeName, seriesPath, episodeNumber);
+            episode.ResumeAsEncodedSeeding = wasEncodedSeeding;
             lock (Episodes)
             {
                 if (Episodes.ContainsKey(episodeName)) return;
@@ -227,6 +228,11 @@ namespace AniDownloaderTerminal
             public int Number { get; } = number;
             public Double StatusPercentage { get; set; }
             public string StatusDescription { get; set; } = "Queued for Download";
+            /// <summary>
+            /// Set when a previous run had already encoded this episode. A later Seeding
+            /// transition must restore EncodedSeeding instead of DownloadedSeeding.
+            /// </summary>
+            public bool ResumeAsEncodedSeeding { get; set; }
 
             private DateTime _stateTime = DateTime.Now;
             public State GetState { get => _episodeState; }
@@ -269,12 +275,18 @@ namespace AniDownloaderTerminal
 
             public double GetTorrentRatio()
             {
-                if (TorrentManager != null)
-                {
-                    double ratio = (double)TorrentManager.Monitor.DataBytesUploaded / (double)TorrentManager.Monitor.DataBytesDownloaded;
-                    return ratio;
-                }
-                return 0;
+                if (TorrentManager == null) return 0;
+
+                long uploaded = TorrentManager.Monitor.DataBytesUploaded;
+                long downloaded = TorrentManager.Monitor.DataBytesDownloaded;
+                if (downloaded > 0)
+                    return (double)uploaded / downloaded;
+
+                // Fast resume restores which pieces are complete, not the download counter.
+                // Use the torrent size so a resumed seed shows a real ratio instead of NaN.
+                long size = TorrentManager.Torrent?.Size ?? 0;
+                if (size <= 0) return 0;
+                return (double)uploaded / size;
             }
 
 
@@ -469,9 +481,10 @@ namespace AniDownloaderTerminal
 
         /// <summary>
         /// If a remote worker already wrote state.EncodedFound / EncodedSeeding or a verified
-        /// (or probe-confirmed H.264) final file exists, promote the in-memory episode so it
+        /// (or probe-confirmed preferred-codec) final file exists, promote the in-memory episode so it
         /// shows 100% and is eligible for CleanEncodedFiles instead of sitting at 0% as
-        /// DownloadedSeeding forever. Also re-marks the file if the .h264ok sidecar was lost.
+        /// DownloadedSeeding forever. Also re-marks the file if the verification sidecar was lost.
+
         /// </summary>
         private static bool TryAdoptWorkerCompletedEncode(EpisodeToDownload episode, string tempPath)
         {
@@ -487,16 +500,16 @@ namespace AniDownloaderTerminal
                     string finalPath = episode.GetEpisodeFilePathWitoutExtension() + ext;
                     if (!File.Exists(finalPath)) continue;
 
-                    if (IsFileVerifiedH264(finalPath))
+                    if (IsFileVerifiedPreferredCodec(finalPath))
                     {
                         goodFinal = true;
                         break;
                     }
                     // Marker missing or stale (mtime changed by media scanners, NFS, etc.)
-                    // — probe once and re-create the marker if it really is H.264.
-                    if (IsH264Video(finalPath))
+                    // — probe once and re-create the marker if it really is the preferred codec.
+                    if (IsPreferredCodecVideo(finalPath))
                     {
-                        MarkFileAsVerifiedH264(finalPath);
+                        MarkFileAsVerifiedPreferredCodec(finalPath);
                         goodFinal = true;
                         break;
                     }
@@ -509,6 +522,7 @@ namespace AniDownloaderTerminal
                 {
                     // No torrent on this process → EncodedFound (cleanup immediately).
                     // Otherwise EncodedSeeding so ratio/time rules still apply.
+                    // A locally resumed torrent is not a remote worker.
                     if (episode.TorrentManager == null || string.IsNullOrWhiteSpace(episode.TorrentURL))
                     {
                         episode.SetState(State.EncodedFound);
@@ -517,7 +531,9 @@ namespace AniDownloaderTerminal
                     else
                     {
                         episode.SetState(State.EncodedSeeding);
-                        episode.StatusDescription = "Encoded-Seeding (worker)";
+                        episode.StatusDescription = episode.ResumeAsEncodedSeeding
+                            ? "Encoded-Seeding"
+                            : "Encoded-Seeding (worker)";
                     }
                     episode.StatusPercentage = 100;
                 }
@@ -539,11 +555,12 @@ namespace AniDownloaderTerminal
         }
 
         /// <summary>
-        /// Probes a video file with ffprobe to determine if the primary video stream is H.264.
-        /// Returns true only when the codec is clearly "h264"; any error, missing stream or
-        /// other codec is treated as "needs conversion".
+        /// Probes a video file with ffprobe to determine if the primary video stream uses the
+        /// preferred codec from Settings.PreferredVideoCodec ("h264" or "hevc").
+        /// Returns true only when the codec matches; any error, missing stream or other codec
+        /// is treated as "needs conversion".
         /// </summary>
-        public static bool IsH264Video(string filePath)
+        public static bool IsPreferredCodecVideo(string filePath)
         {
             if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
                 return false;
@@ -566,21 +583,23 @@ namespace AniDownloaderTerminal
                 if (p.ExitCode != 0 || string.IsNullOrWhiteSpace(output))
                     return false;
 
-                return output.Equals("h264", StringComparison.OrdinalIgnoreCase);
+                string preferred = NormalizePreferredCodec(Settings.PreferredVideoCodec);
+                return output.Equals(preferred, StringComparison.OrdinalIgnoreCase);
             }
             catch (Exception ex)
             {
-                Global.TaskAdmin.Logger.Debug_Log($"IsH264Video probe failed for '{filePath}': {ex.Message}", "IsH264Video");
+                Global.TaskAdmin.Logger.Debug_Log($"IsPreferredCodecVideo probe failed for '{filePath}': {ex.Message}", "IsPreferredCodecVideo");
                 return false;
             }
         }
 
         /// <summary>
         /// Returns true when a matching verification marker exists for <paramref name="videoPath"/>
-        /// and the recorded size + UTC mtime still match the current file. This lets the
-        /// periodic scanner skip already-confirmed H.264 files without calling ffprobe again.
+        /// and the recorded size, UTC mtime, and codec still match the current file and the
+        /// current PreferredVideoCodec. This lets the periodic scanner skip already-confirmed
+        /// files without calling ffprobe again.
         /// </summary>
-        public static bool IsFileVerifiedH264(string videoPath)
+        public static bool IsFileVerifiedPreferredCodec(string videoPath)
         {
             if (string.IsNullOrWhiteSpace(videoPath) || !File.Exists(videoPath))
                 return false;
@@ -591,9 +610,10 @@ namespace AniDownloaderTerminal
 
             try
             {
-                var fi = new FileInfo(videoPath);
+                FileInfo fi = new FileInfo(videoPath);
                 long expectedSize = -1;
                 long expectedMtimeTicks = -1;
+                string recordedCodec = string.Empty;
 
                 foreach (string line in File.ReadLines(markerPath))
                 {
@@ -601,42 +621,72 @@ namespace AniDownloaderTerminal
                         _ = long.TryParse(line.AsSpan(5), out expectedSize);
                     else if (line.StartsWith("mtime=", StringComparison.Ordinal))
                         _ = long.TryParse(line.AsSpan(6), out expectedMtimeTicks);
+                    else if (line.StartsWith("codec=", StringComparison.Ordinal))
+                        recordedCodec = line.Substring(6).Trim();
                 }
 
-                return expectedSize == fi.Length && expectedMtimeTicks == fi.LastWriteTimeUtc.Ticks;
+                string preferred = NormalizePreferredCodec(Settings.PreferredVideoCodec);
+                // Backward compatibility: markers written before the codec line existed are treated
+                // as h264. A missing or mismatched codec invalidates the marker when the preference
+                // is hevc (or any non-h264).
+                bool codecMatches = string.IsNullOrEmpty(recordedCodec)
+                    ? preferred.Equals("h264", StringComparison.OrdinalIgnoreCase)
+                    : recordedCodec.Equals(preferred, StringComparison.OrdinalIgnoreCase);
+
+                return expectedSize == fi.Length
+                    && expectedMtimeTicks == fi.LastWriteTimeUtc.Ticks
+                    && codecMatches;
             }
             catch (Exception ex)
             {
-                Global.TaskAdmin.Logger.Debug_Log($"IsFileVerifiedH264 failed for '{videoPath}': {ex.Message}", "IsFileVerifiedH264");
+                Global.TaskAdmin.Logger.Debug_Log($"IsFileVerifiedPreferredCodec failed for '{videoPath}': {ex.Message}", "IsFileVerifiedPreferredCodec");
                 return false;
             }
         }
 
         /// <summary>
         /// Writes (or overwrites) a small sidecar marker next to the video that records
-        /// its current size and UTC last-write time. Subsequent scans can then skip the
-        /// expensive ffprobe call as long as the file has not been replaced or modified.
+        /// its current size, UTC last-write time, and the preferred codec. Subsequent scans
+        /// can then skip the expensive ffprobe call as long as the file has not been replaced
+        /// or modified and the preferred codec has not changed.
         /// Best-effort: failures are logged but never throw.
         /// </summary>
-        public static void MarkFileAsVerifiedH264(string videoPath)
+        public static void MarkFileAsVerifiedPreferredCodec(string videoPath)
         {
             if (string.IsNullOrWhiteSpace(videoPath) || !File.Exists(videoPath))
                 return;
 
             try
             {
-                var fi = new FileInfo(videoPath);
+                FileInfo fi = new FileInfo(videoPath);
                 string markerPath = videoPath + Settings.VerifiedH264MarkerSuffix;
+                string preferred = NormalizePreferredCodec(Settings.PreferredVideoCodec);
                 string content =
                     $"size={fi.Length}{Environment.NewLine}" +
                     $"mtime={fi.LastWriteTimeUtc.Ticks}{Environment.NewLine}" +
-                    $"codec=h264{Environment.NewLine}";
+                    $"codec={preferred}{Environment.NewLine}";
                 File.WriteAllText(markerPath, content);
             }
             catch (Exception ex)
             {
-                Global.TaskAdmin.Logger.Debug_Log($"MarkFileAsVerifiedH264 failed for '{videoPath}': {ex.Message}", "MarkFileAsVerifiedH264");
+                Global.TaskAdmin.Logger.Debug_Log($"MarkFileAsVerifiedPreferredCodec failed for '{videoPath}': {ex.Message}", "MarkFileAsVerifiedPreferredCodec");
             }
+        }
+
+        /// <summary>
+        /// Normalizes the preferred-codec setting to the exact string ffprobe returns
+        /// ("h264" or "hevc"). Unknown values fall back to "h264".
+        /// </summary>
+        private static string NormalizePreferredCodec(string? codec)
+        {
+            if (string.IsNullOrWhiteSpace(codec))
+                return "h264";
+
+            string normalized = codec.Trim().ToLowerInvariant();
+            if (normalized == "hevc" || normalized == "h265" || normalized == "h.265")
+                return "hevc";
+
+            return "h264";
         }
 
         public void CleanEncodedFiles()
@@ -664,11 +714,7 @@ namespace AniDownloaderTerminal
                     }
                     else if (episode.TorrentManager != null)
                     {
-                        double ratio = 0;
-                        if (episode.TorrentManager.Monitor.DataBytesDownloaded > 0)
-                        {
-                            ratio = episode.TorrentManager.Monitor.DataBytesUploaded / episode.TorrentManager.Monitor.DataBytesDownloaded;
-                        }
+                        double ratio = episode.GetTorrentRatio();
 
                         if (Settings.UseRatio)
                         {
@@ -742,10 +788,10 @@ namespace AniDownloaderTerminal
             {
                 // Another instance (or a previous run) already produced a verified final.
                 // Skip re-encoding and let the caller advance the episode state.
-                if (IsFileVerifiedH264(finalEpisodeName) || IsH264Video(finalEpisodeName))
+                if (IsFileVerifiedPreferredCodec(finalEpisodeName) || IsPreferredCodecVideo(finalEpisodeName))
                 {
-                    if (!IsFileVerifiedH264(finalEpisodeName))
-                        MarkFileAsVerifiedH264(finalEpisodeName);
+                    if (!IsFileVerifiedPreferredCodec(finalEpisodeName))
+                        MarkFileAsVerifiedPreferredCodec(finalEpisodeName);
                     return true;
                 }
                 // Incomplete / wrong-codec leftover from a previous crash — remove it so we can
@@ -844,7 +890,7 @@ namespace AniDownloaderTerminal
             if (!extensionToUse.TrimStart('.').ToLowerInvariant().Equals("mkv"))
             {
                 // Non-MKV output is already the final file; mark it so future scans skip the probe.
-                MarkFileAsVerifiedH264(finalEpisodeName);
+                MarkFileAsVerifiedPreferredCodec(finalEpisodeName);
                 EncodingClaim.Release(tempFolder);
                 return true;
             }
@@ -916,8 +962,8 @@ namespace AniDownloaderTerminal
                 try { if (File.Exists(tempOptimizedName)) File.Delete(tempOptimizedName); } catch { }
             }
 
-            // Whether optimized or not, the file is valid H.264 at this point.
-            MarkFileAsVerifiedH264(finalEpisodeName);
+            // Whether optimized or not, the file is valid preferred-codec at this point.
+            MarkFileAsVerifiedPreferredCodec(finalEpisodeName);
             EncodingClaim.Release(tempFolder);
             return true;
         }
@@ -1071,8 +1117,17 @@ namespace AniDownloaderTerminal
                 lock (episode)
                 {
                     // Do not demote an episode that is already encoded and seeding.
+                    // A resumed encoded torrent must stay EncodedSeeding so it seeds to ratio
+                    // instead of being adopted as a worker encode.
                     if (episode.EpisodeState == State.EncodedSeeding || episode.EpisodeState == State.EncodedFound)
                     {
+                        episode.StatusPercentage = 100;
+                        return;
+                    }
+                    if (episode.ResumeAsEncodedSeeding)
+                    {
+                        episode.SetState(State.EncodedSeeding);
+                        episode.StatusDescription = "Encoded-Seeding";
                         episode.StatusPercentage = 100;
                         return;
                     }
