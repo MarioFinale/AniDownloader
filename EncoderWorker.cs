@@ -48,7 +48,7 @@ namespace AniDownloaderTerminal
             }
             if (!ToolAvailable("mkvmerge", "--version"))
             {
-                WriteLine("WARNING: mkvmerge not found on PATH. MKV files will be left unoptimized (still valid H.264).");
+                WriteLine("WARNING: mkvmerge not found on PATH. MKV files will be left unoptimized (still valid).");
             }
 
             string workerId = EncodingClaim.GetLocalWorkerId();
@@ -124,14 +124,14 @@ namespace AniDownloaderTerminal
                     string extension = Path.GetExtension(sourceFile).ToLowerInvariant();
                     string finalPath = Path.Combine(seriesPath, episodeName + extension);
 
-                    // Already done by another machine (or by a previous run whose .h264ok
+                    // Already done by another machine (or by a previous run whose verification
                     // marker was lost / mtime changed by a media scanner). Probe if needed.
                     if (File.Exists(finalPath))
                     {
-                        bool good = SeriesDownloader.IsFileVerifiedH264(finalPath);
-                        if (!good && SeriesDownloader.IsH264Video(finalPath))
+                        bool good = SeriesDownloader.IsFileVerifiedPreferredCodec(finalPath);
+                        if (!good && SeriesDownloader.IsPreferredCodecVideo(finalPath))
                         {
-                            SeriesDownloader.MarkFileAsVerifiedH264(finalPath);
+                            SeriesDownloader.MarkFileAsVerifiedPreferredCodec(finalPath);
                             good = true;
                         }
                         if (good)
@@ -152,7 +152,7 @@ namespace AniDownloaderTerminal
                     bool ok = EncodeFile(episodeName, seriesPath, tempDir, sourceFile, finalPath);
                     if (ok)
                     {
-                        SeriesDownloader.MarkFileAsVerifiedH264(finalPath);
+                        SeriesDownloader.MarkFileAsVerifiedPreferredCodec(finalPath);
                         WriteState(tempDir, "EncodedFound");
                         EncodingClaim.Release(tempDir);
                         WriteLine($"Finished '{episodeName}'");
@@ -285,10 +285,10 @@ namespace AniDownloaderTerminal
             {
                 if (File.Exists(finalPath))
                 {
-                    if (SeriesDownloader.IsFileVerifiedH264(finalPath) || SeriesDownloader.IsH264Video(finalPath))
+                    if (SeriesDownloader.IsFileVerifiedPreferredCodec(finalPath) || SeriesDownloader.IsPreferredCodecVideo(finalPath))
                     {
-                        if (!SeriesDownloader.IsFileVerifiedH264(finalPath))
-                            SeriesDownloader.MarkFileAsVerifiedH264(finalPath);
+                        if (!SeriesDownloader.IsFileVerifiedPreferredCodec(finalPath))
+                            SeriesDownloader.MarkFileAsVerifiedPreferredCodec(finalPath);
                         return true;
                     }
                     // Incomplete leftover only — never touch the source inside .temp

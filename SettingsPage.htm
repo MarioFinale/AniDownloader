@@ -396,7 +396,32 @@
                 font-size: 1.4rem;
             }
         }
-    </style>
+    
+        .settings-group {
+            margin-bottom: 1.25rem;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--card-bg);
+            overflow: hidden;
+        }
+        .settings-group summary {
+            padding: 0.75rem 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            background: var(--help-bg);
+            user-select: none;
+            list-style: none;
+        }
+        .settings-group summary::-webkit-details-marker { display: none; }
+        .settings-group summary::before {
+            content: "▸ ";
+            display: inline-block;
+            transition: transform 0.15s;
+        }
+        .settings-group[open] summary::before { content: "▾ "; }
+        .settings-group .table-responsive { margin: 0; }
+        .settings-group table { margin-bottom: 0; }
+</style>
 </head>
 <body>
     <div class="page-header">
@@ -430,6 +455,9 @@
                 <a class="nav-link" href="#" data-tab="series">Series to Download</a>
             </li>
             <li class="nav-item" style="flex:1;">
+                <a class="nav-link" href="#" data-tab="logs">Logs</a>
+            </li>
+            <li class="nav-item" style="flex:1;">
                 <a class="nav-link" href="#" data-tab="settings">Program Settings</a>
             </li>
         </ul>
@@ -459,6 +487,9 @@
         <div class="tab-pane" id="tab-series">
             <div class="content-card">
                 <h3>Series to Download</h3>
+                <p class="subtitle" style="margin-top:0.25rem; margin-bottom:1rem; color:var(--muted);">
+                    Edit the list of series. Changes are saved only when you press the send button.
+                </p>
                 <form method="post" action="update">
                     ==========TABLE HERE===========
                     <div class="actions-row">
@@ -467,8 +498,36 @@
                     </div>
                 </form>
                 <div class="help-text">
-                    <h6>Offset adds an offset value to the episode numbers.</h6>
-                    <h6>"Filter" is a Regular Expression. By default (Exclusive) it excludes matching titles. Check "InclusiveFilter" to keep only matching titles and exclude the rest.</h6>
+                    <h4 style="margin-top:0;">How series entries work</h4>
+                    <h6><strong>Name</strong> — display name used for matching and organization.</h6>
+                    <h6><strong>Path</strong> — folder where episodes for this series are stored.</h6>
+                    <h6><strong>Offset</strong> — number added to detected episode numbers (useful when numbering differs from release numbering).</h6>
+                    <h6><strong>Filter</strong> — regular expression applied to release titles.</h6>
+                    <h6><strong>InclusiveFilter</strong> — unchecked (default) excludes matching titles; checked keeps only matching titles.</h6>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: Logs -->
+        <div class="tab-pane" id="tab-logs">
+            <div class="content-card">
+                <h3>Latest Log Entries</h3>
+                <p class="subtitle" style="margin-top:0.25rem; margin-bottom:1rem; color:var(--muted);">
+                    Most recent messages from the running process (newest first). Refreshes automatically.
+                </p>
+                <div class="table-responsive">
+                    <table class="table" id="logsTable">
+                        <thead>
+                            <tr>
+                                <th scope="col" style="width:14%;">Time</th>
+                                <th scope="col" style="width:8%;">Type</th>
+                                <th scope="col" style="width:18%;">Source</th>
+                                <th scope="col">Message</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logs-body">
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -478,22 +537,20 @@
             <div class="content-card">
                 <h3>Program Settings</h3>
                 <form method="post" action="settings">
-                    <div class="table-responsive">
-                        <table class="table" id="Settings">
-                            <thead>
-                                <tr>
-                                    <th scope="col">Setting</th>
-                                    <th scope="col">Value</th>
-                                </tr>
-                            </thead>
-                            <tbody id="Settings">
+                    <details open class="settings-group">
+                        <summary>Download & Quality Filters</summary>
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th scope="col">Setting</th>
+                                        <th scope="col">Value</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
                                 <tr>
                                     <td>Max File Size (MB)</td>
                                     <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="number" name="MaxFileSizeMb" value="MaxFileSizeMb-replace"></td>
-                                </tr>
-                                <tr>
-                                    <td>Delay for web requests</td>
-                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="number" name="RPSDelayMs" value="RPSDelayMs-replace"></td>
                                 </tr>
                                 <tr>
                                     <td>Too few seeders Treshold</td>
@@ -507,6 +564,47 @@
                                     <td>Episode too new (minutes)</td>
                                     <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="number" name="TooNewMinutes" value="TooNewMinutes-replace"></td>
                                 </tr>
+                                <tr>
+                                    <td>Minimum download quality</td>
+                                    <td>
+                                        <select style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="MinimumDownloadQuality">
+                                            <option value="&lt;480p" <!--MinimumDownloadQualityLt480Selected--> >&lt;480p</option>
+                                            <option value="480p" <!--MinimumDownloadQuality480Selected-->>480p</option>
+                                            <option value="720p" <!--MinimumDownloadQuality720Selected-->>720p</option>
+                                            <option value="1080p" <!--MinimumDownloadQuality1080Selected-->>1080p</option>
+                                            <option value="2K" <!--MinimumDownloadQuality2KSelected-->>2K</option>
+                                            <option value="4K" <!--MinimumDownloadQuality4KSelected-->>4K</option>
+                                        </select>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>Override if last detected episode is over (hours) old</td>
+                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="number" name="QualityOverrideHours" value="QualityOverrideHours-replace" min="0"></td>
+                                </tr>
+                                <tr>
+                                    <td>Exclude Batch Releases</td>
+                                    <td>
+                                        <select style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="ExcludeBatchReleases">
+                                            <option value="True" <!--ExcludeBatchReleasesTrueSelected-->>True</option>
+                                            <option value="False" <!--ExcludeBatchReleasesFalseSelected-->>False</option>
+                                        </select>
+                                    </td>
+                                </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </details>
+                    <details open class="settings-group">
+                        <summary>Seeding</summary>
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th scope="col">Setting</th>
+                                        <th scope="col">Value</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
                                 <tr>
                                     <td>Seeding time (hours)</td>
                                     <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="number" name="SeedingTimeHours" value="SeedingTimeHours-replace"></td>
@@ -524,14 +622,24 @@
                                         </select>
                                     </td>
                                 </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </details>
+                    <details open class="settings-group">
+                        <summary>Web Server & Requests</summary>
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th scope="col">Setting</th>
+                                        <th scope="col">Value</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
                                 <tr>
-                                    <td>Exclude Batch Releases</td>
-                                    <td>
-                                        <select style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="ExcludeBatchReleases">
-                                            <option value="True" <!--ExcludeBatchReleasesTrueSelected-->>True</option>
-                                            <option value="False" <!--ExcludeBatchReleasesFalseSelected-->>False</option>
-                                        </select>
-                                    </td>
+                                    <td>Delay for web requests</td>
+                                    <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="number" name="RPSDelayMs" value="RPSDelayMs-replace"></td>
                                 </tr>
                                 <tr>
                                     <td>Enable Web Server</td>
@@ -550,6 +658,21 @@
                                     <td>Listening IP</td>
                                     <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="ListeningIP" value="ListeningIP-replace"></td>
                                 </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </details>
+                    <details open class="settings-group">
+                        <summary>Paths & Discovery</summary>
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th scope="col">Setting</th>
+                                        <th scope="col">Value</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
                                 <tr>
                                     <td>Default Series Path</td>
                                     <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="DefaultPath" value="DefaultPath-replace"></td>
@@ -562,6 +685,21 @@
                                     <td>Series Search Trigger Filename</td>
                                     <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="NeedsConvertFileName" value="NeedsConvertFileName-replace"></td>
                                 </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </details>
+                    <details open class="settings-group">
+                        <summary>Language Filters</summary>
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th scope="col">Setting</th>
+                                        <th scope="col">Value</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
                                 <tr>
                                     <td>Uncensored Episodes Regex</td>
                                     <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="UncensoredEpisodeRegex" value="UncensoredEpisodeRegex-replace"></td>
@@ -583,6 +721,21 @@
                                     <td>Custom Language (Description) Regex</td>
                                     <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="CustomLanguageDescriptionRegex" value="CustomLanguageDescriptionRegex-replace"></td>
                                 </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </details>
+                    <details open class="settings-group">
+                        <summary>Transcoding & Library Optimization</summary>
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th scope="col">Setting</th>
+                                        <th scope="col">Value</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
                                 <tr>
                                     <td>Use HWAccel in FFMpeg</td>
                                     <td>
@@ -593,12 +746,31 @@
                                     </td>
                                 </tr>
                                 <tr>
+                                    <td>Scan and optimize existing video files</td>
+                                    <td>
+                                        <select style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="EnableExistingVideoScanAndOptimize">
+                                            <option value="True" <!--EnableExistingVideoScanAndOptimizeTrueSelected-->>True</option>
+                                            <option value="False" <!--EnableExistingVideoScanAndOptimizeFalseSelected-->>False</option>
+                                        </select>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>Preferred video codec for optimization</td>
+                                    <td>
+                                        <select style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="PreferredVideoCodec">
+                                            <option value="h264" <!--PreferredVideoCodecH264Selected-->>H264 (Compatible with most devices)</option>
+                                            <option value="hevc" <!--PreferredVideoCodecHevcSelected-->>H265 HEVC (Lower file size and higher quality)</option>
+                                        </select>
+                                    </td>
+                                </tr>
+                                <tr>
                                     <td>Output Transcoding FFMpeg Commandline Arguments</td>
                                     <td><input style="width:100%; padding:inherit; box-sizing:border-box;" type="text" name="OutputTranscodeCommandLineArguments" value="OutputTranscodeCommandLineArguments-replace"></td>
                                 </tr>
-                            </tbody>
-                        </table>
-                    </div>
+                                </tbody>
+                            </table>
+                        </div>
+                    </details>
                     <div class="actions-row">
                         <button type="submit" id="update" class="btn-modern">Send settings to the server</button>
                     </div>
@@ -607,6 +779,8 @@
                     <h6>The "Output Transcoding FFMpeg Commandline Arguments" setting follows the following usage:</h6>
                     <h6>FFMpeg -i "filetoConvert" -y OutputTranscodeCommandLineArguments "finalEpisodeName"</h6>
                     <h6>Only modify this parameter if you know what are you doing.</h6>
+                    <h6>The Preferred video codec must match the codec produced by those arguments (libx264 for H264, libx265 for H265 HEVC). When "Scan and optimize existing video files" is False, the library is not scanned and no verification markers are written for existing files.</h6>
+                    <h6>Minimum download quality skips releases below the chosen tier (default 1080p). If no candidate meets the tier and the newest release for that episode is older than "Override if last detected episode is over (hours) old", the best available release is downloaded anyway. Set the override hours to 0 to never download below the minimum quality.</h6>
                 </div>
             </div>
         </div>
@@ -767,9 +941,27 @@
             })()
         };
 
+        function updateLogs() {
+            // Only refresh when the Logs tab is visible to keep the page light
+            var logsPane = document.getElementById('tab-logs');
+            if (!logsPane || !logsPane.classList.contains('active')) return;
+            (async () => {
+                try {
+                    let response = await fetch('./logs');
+                    let newHtml = await response.text();
+                    if (!newHtml) return;
+                    let tbody = document.getElementById('logs-body');
+                    if (tbody) tbody.innerHTML = newHtml;
+                } catch (e) {
+                    // Ignore transient network errors during polling
+                }
+            })();
+        }
+
         (function () { //Auto-update the table every 300ms
             updateTableContents("currentDownloads-body");
             updateCurrentOperation("current-operation");
+            updateLogs();
             setTimeout(arguments.callee, 300);
         })();
     </script>

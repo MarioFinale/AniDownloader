@@ -16,6 +16,23 @@
         public static ulong TooNewMinutes { get => _TooNewMinutes; set => _TooNewMinutes = value; }
         static ulong _TooNewMinutes = 120;
 
+        /// <summary>
+        /// Minimum video quality accepted for new downloads.
+        /// Candidates below this tier are skipped unless the quality override hours condition is met.
+        /// Allowed values: "<480p", "480p", "720p", "1080p", "2K", "4K". Default is 1080p.
+        /// </summary>
+        public static string MinimumDownloadQuality { get => _MinimumDownloadQuality; set => _MinimumDownloadQuality = value; }
+        static string _MinimumDownloadQuality = "1080p";
+
+        /// <summary>
+        /// Hours to wait before accepting a release below MinimumDownloadQuality.
+        /// If the newest candidate for an episode is older than this many hours and no release
+        /// that meets the minimum quality has appeared, the best available candidate is downloaded anyway.
+        /// Set to 0 to disable the override (never download below the minimum quality).
+        /// </summary>
+        public static ulong QualityOverrideHours { get => _QualityOverrideHours; set => _QualityOverrideHours = value; }
+        static ulong _QualityOverrideHours = 24;
+
         public static ulong SeedingTimeHours { get => _SeedingTimeHours; set => _SeedingTimeHours = value;}
         static ulong _SeedingTimeHours = 12;
 
@@ -50,9 +67,28 @@
         static string _NeedsConvertFileName = ".needsConvert";
 
         /// <summary>
+        /// When true, the periodic series scan looks for existing video files that are not already
+        /// in the preferred codec and queues them for re-encoding. Verification markers are written
+        /// only for files that match the preferred codec. When false, the library scan is skipped
+        /// entirely (no probe, no markers written for existing files). Newly downloaded episodes
+        /// are still transcoded with the configured ffmpeg arguments.
+        /// </summary>
+        public static bool EnableExistingVideoScanAndOptimize { get => _EnableExistingVideoScanAndOptimize; set => _EnableExistingVideoScanAndOptimize = value; }
+        static bool _EnableExistingVideoScanAndOptimize = true;
+
+        /// <summary>
+        /// Codec considered already optimized by the library scanner and by post-encode verification.
+        /// "h264" (most compatible) or "hevc" (H.265, smaller files). The value must match the
+        /// codec produced by OutputTranscodeCommandLineArguments (libx264 vs libx265 / hevc).
+        /// </summary>
+        public static string PreferredVideoCodec { get => _PreferredVideoCodec; set => _PreferredVideoCodec = value; }
+        static string _PreferredVideoCodec = "h264";
+
+        /// <summary>
         /// Suffix appended to a video filename to form its verification marker
         /// (e.g. "Series 01.mkv" → "Series 01.mkv.h264ok"). The marker stores
-        /// size + UTC mtime so we can skip re-probing files that have not changed.
+        /// size + UTC mtime + codec so we can skip re-probing files that have not changed
+        /// and that still match the preferred codec.
         /// </summary>
         public static string VerifiedH264MarkerSuffix { get => _VerifiedH264MarkerSuffix; set => _VerifiedH264MarkerSuffix = value; }
         static string _VerifiedH264MarkerSuffix = ".h264ok";
@@ -155,6 +191,8 @@
                 TryUpdateSetting(settingValues, "TooFewSeeders", ref _TooFewSeeders);
                 TryUpdateSetting(settingValues, "TooOldDays", ref _TooOldDays);
                 TryUpdateSetting(settingValues, "TooNewMinutes", ref _TooNewMinutes);
+                TryUpdateSetting(settingValues, "MinimumDownloadQuality", ref _MinimumDownloadQuality);
+                TryUpdateSetting(settingValues, "QualityOverrideHours", ref _QualityOverrideHours);
                 TryUpdateSetting(settingValues, "SeedingTimeHours", ref _SeedingTimeHours);
                 TryUpdateSetting(settingValues, "WebserverPort", ref _WebserverPort);
                 TryUpdateSetting(settingValues, "SeedingRatio", ref _SeedingRatio);
@@ -166,6 +204,8 @@
                 TryUpdateSetting(settingValues, "SearchPaths", ref _SearchPaths);
                 TryUpdateSetting(settingValues, "_NeedsConvertFileName", ref _NeedsConvertFileName);
                 TryUpdateSetting(settingValues, "VerifiedH264MarkerSuffix", ref _VerifiedH264MarkerSuffix);
+                TryUpdateSetting(settingValues, "EnableExistingVideoScanAndOptimize", ref _EnableExistingVideoScanAndOptimize);
+                TryUpdateSetting(settingValues, "PreferredVideoCodec", ref _PreferredVideoCodec);
                 TryUpdateSetting(settingValues, "WorkerClaimFileName", ref _WorkerClaimFileName);
                 TryUpdateSetting(settingValues, "WorkerClaimStaleSeconds", ref _WorkerClaimStaleSeconds);
                 TryUpdateSetting(settingValues, "WorkerId", ref _WorkerId);
@@ -179,6 +219,8 @@
                 TryUpdateSetting(settingValues, "UseTranscodingHWAccel", ref _UseTranscodingHWAccel);
                 TryUpdateSetting(settingValues, "UserName", ref _UserName);
                 TryUpdateSetting(settingValues, "Password", ref _Password);
+
+                NormalizeQualitySettings(settingValues);
 
                 if (InvalidSettings)
                 {
@@ -198,6 +240,40 @@
             }            
         }
 
+        /// <summary>
+        /// Ensures MinimumDownloadQuality is one of the supported tiers. An unrecognized value
+        /// is replaced with the default and the settings file is marked for rewrite.
+        /// </summary>
+        private void NormalizeQualitySettings(Dictionary<string, string> settingValues)
+        {
+            string normalized = NormalizeMinimumDownloadQuality(_MinimumDownloadQuality);
+            if (!string.Equals(normalized, _MinimumDownloadQuality, StringComparison.Ordinal))
+            {
+                Global.TaskAdmin.Logger.EX_Log(
+                    $"MinimumDownloadQuality '{_MinimumDownloadQuality}' is not a supported tier. Using '{normalized}'.",
+                    "LoadAndValidateSettingsFile");
+                _MinimumDownloadQuality = normalized;
+                settingValues["MinimumDownloadQuality"] = normalized;
+                InvalidSettings = true;
+            }
+        }
+
+        /// <summary>
+        /// Returns the canonical quality tier for a user-supplied value, or the default when unrecognized.
+        /// </summary>
+        public static string NormalizeMinimumDownloadQuality(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return "1080p";
+            string trimmed = value.Trim();
+            if (string.Equals(trimmed, "<480p", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(trimmed, "lt480p", StringComparison.OrdinalIgnoreCase)) return "<480p";
+            if (string.Equals(trimmed, "480p", StringComparison.OrdinalIgnoreCase)) return "480p";
+            if (string.Equals(trimmed, "720p", StringComparison.OrdinalIgnoreCase)) return "720p";
+            if (string.Equals(trimmed, "1080p", StringComparison.OrdinalIgnoreCase)) return "1080p";
+            if (string.Equals(trimmed, "2k", StringComparison.OrdinalIgnoreCase)) return "2K";
+            if (string.Equals(trimmed, "4k", StringComparison.OrdinalIgnoreCase)) return "4K";
+            return "1080p";
+        }
 
         private void TryUpdateSetting<T>(Dictionary<string, string> settingValues, string key, ref T variable)
         {
