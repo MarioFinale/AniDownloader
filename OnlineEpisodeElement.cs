@@ -14,17 +14,17 @@ namespace AniDownloaderTerminal
         public string ProbableRes { get; }
         public int Seeders { get; }
 
-        private int? _ProbableEpNumber;
-        public int? ProbableEpNumber { get { return _ProbableEpNumber; } }
+        private int? _probableEpNumber;
+        public int? ProbableEpNumber { get { return _probableEpNumber; } }
         public Lang ProbableLang { get; set; }
-        private bool _IsAnime;
-        public bool IsAnime { get { return _IsAnime; } }
-        private bool _IsTooOld;
-        public bool IsTooOld { get { return _IsTooOld; } }
-        private bool _IsTooNew;
-        public bool IsTooNew { get { return _IsTooNew; } }
-        public bool TooFewSeeders { get { return _TooFewSeeders; } }
-        private readonly bool _TooFewSeeders;
+        private bool _isAnime;
+        public bool IsAnime { get { return _isAnime; } }
+        private bool _isTooOld;
+        public bool IsTooOld { get { return _isTooOld; } }
+        private bool _isTooNew;
+        public bool IsTooNew { get { return _isTooNew; } }
+        public bool TooFewSeeders { get { return _tooFewSeeders; } }
+        private readonly bool _tooFewSeeders;
 
         [GeneratedRegex("<pubDate>(.+)<\\/pubDate>[\\s\\S]+?CDATA.+?#(\\d{1,8}) \\| (.+?)<\\/a\\> \\| (.+?) \\| (.+?) \\| (.+?)\\]")]
         private static partial Regex NyaaCDATARegex();
@@ -34,7 +34,7 @@ namespace AniDownloaderTerminal
         private static partial Regex ResolutionRegex();
         [GeneratedRegex(", (\\d{1,2}) (\\w{3,4}) (\\d{4})")]
         private static partial Regex DateRegex();
-        [GeneratedRegex(@"(?:s\d{1,2} *ep|ep| - |s\d{1,2}e)[ _-]*(\d{1,2})|(\d{1,2}) of \d{1,2}|^[\D ]+ (\d{1,2})(?:$|\.\D{1,3}$)", RegexOptions.IgnoreCase | RegexOptions.Singleline, "en-001")]
+        [GeneratedRegex(@"(?:s\d{1,2} *ep|ep| - |s\d{1,2}e)[ _-]*(\d{1,3})|(\d{1,3}) of \d{1,2}|^[\D ]+ (\d{1,2})(?:$|\.\D{1,3}$)|s*(?:\d{1,2}) e*(\d{1,3})(?:$|\.\D{1,3}$)", RegexOptions.IgnoreCase | RegexOptions.Singleline, "en-001")]
         private static partial Regex EpisodeNumberRegex();
         [GeneratedRegex(@"[^\w]eng\w*|english")]
         private static partial Regex EngLangRegex();
@@ -65,8 +65,8 @@ namespace AniDownloaderTerminal
             TorrentUrl = $"https://nyaa.si/download/{Id}.torrent";
             ProbableLang = Lang.Undefined;
             ProbableRes = DetermineResolution(Name);
-            _IsTooOld = _TooFewSeeders = false;
-            _TooFewSeeders = Settings.TooFewSeeders >= Seeders;
+            _isTooOld = _tooFewSeeders = false;
+            _tooFewSeeders = Settings.TooFewSeeders >= Seeders;
             SetAgeFromPubDate(match.Groups[1].Value.Trim());
             SetEpisodeNumber(Name);
             DetermineLanguage();
@@ -98,8 +98,8 @@ namespace AniDownloaderTerminal
                 var year = int.Parse(dateMatch.Groups[3].Value);
                 var episodeDate = new DateTime(year, month, day);
                 var ageSpan = DateTime.Now - episodeDate;
-                _IsTooOld = ageSpan > TimeSpan.FromDays(Settings.TooOldDays);
-                _IsTooNew = ageSpan < TimeSpan.FromMinutes(Settings.TooNewMinutes);
+                _isTooOld = ageSpan > TimeSpan.FromDays(Settings.TooOldDays);
+                _isTooNew = ageSpan < TimeSpan.FromMinutes(Settings.TooNewMinutes);
             }
         }
 
@@ -124,7 +124,7 @@ namespace AniDownloaderTerminal
         private void SetEpisodeNumber(String content)
         {
 
-            _ProbableEpNumber = GetEpNumberFromString(content);
+            _probableEpNumber = GetEpNumberFromString(content);
            
         }
 
@@ -135,13 +135,14 @@ namespace AniDownloaderTerminal
             if (epMatch.Groups[1].Success) return int.Parse(epMatch.Groups[1].Value);
             if (epMatch.Groups[2].Success) return int.Parse(epMatch.Groups[2].Value);
             if (epMatch.Groups[3].Success) return int.Parse(epMatch.Groups[3].Value);
+            if (epMatch.Groups[4].Success) return int.Parse(epMatch.Groups[4].Value);
             return null;
         }
 
         private void DetermineLanguage()
         {
-            _IsAnime = Category.Contains("Anime");
-            if (_IsAnime && !Category.Contains("Anime - Raw"))
+            _isAnime = Category.Contains("Anime");
+            if (_isAnime && !Category.Contains("Anime - Raw"))
             {
                 var nameLower = Name.ToLowerInvariant();
                 var isCustom = Regex.IsMatch(nameLower, Settings.CustomLanguageNameRegex);
@@ -151,12 +152,12 @@ namespace AniDownloaderTerminal
                 else if (isCustom) ProbableLang = Lang.Custom;
                 else if (isEnglish) ProbableLang = Lang.Eng;
             }
-            else if (_IsAnime) ProbableLang = Lang.RAW;
+            else if (_isAnime) ProbableLang = Lang.RAW;
         }
 
         public void AddEpisodeNumberOffset(int Offset) {
 
-            _ProbableEpNumber += Offset; 
+            _probableEpNumber += Offset; 
         }
 
         public static string[] GetOnlineEpisodesListFromContent(string content)
